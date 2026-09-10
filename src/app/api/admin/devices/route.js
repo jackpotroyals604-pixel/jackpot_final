@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '../../../../lib/mongodb';
-import { blockDevicePermanently, trackDeviceSession, parseUserAgent, getRolePostTitle } from '../../../../lib/deviceBlock';
+import { blockDevicePermanently, unlinkDeviceRecord, unblockDevice, trackDeviceSession, parseUserAgent, getRolePostTitle } from '../../../../lib/deviceBlock';
 
 function isSuperAdminUser(adminRole, adminEmail) {
   if (adminRole === 'admin') return true;
@@ -94,17 +94,21 @@ export async function GET(req) {
         const cleanEmail = u.email.toLowerCase().trim();
         const postInfo = getRolePostTitle(u.role || 'player');
         
+        const userFields = {
+          name: u.name || cleanEmail.split('@')[0],
+          role: u.role || 'player',
+          postTitle: postInfo.title,
+          postEmoji: postInfo.emoji,
+          postColor: postInfo.color
+        };
+        if (u.deviceId) userFields.deviceId = u.deviceId;
+        if (u.deviceFingerprint) userFields.deviceFingerprint = u.deviceFingerprint;
+
         syncOps.push(
           sessionsCollection.updateOne(
             { email: cleanEmail },
             {
-              $set: {
-                name: u.name || cleanEmail.split('@')[0],
-                role: u.role || 'player',
-                postTitle: postInfo.title,
-                postEmoji: postInfo.emoji,
-                postColor: postInfo.color
-              },
+              $set: userFields,
               $setOnInsert: {
                 deviceId: u.deviceId || `dev-${Buffer.from(cleanEmail).toString('hex').slice(0, 14)}`,
                 deviceFingerprint: u.deviceFingerprint || '',
@@ -340,20 +344,50 @@ export async function GET(req) {
   }
 }
 
-// POST block device permanently (Super Admin Only)
+// POST perform device operations: block, unblock, or unlink (Super Admin Only)
 export async function POST(req) {
   try {
-    const { adminRole, adminEmail, deviceId, deviceFingerprint, reason } = await req.json();
+    const { action, adminRole, adminEmail, email, deviceId, deviceFingerprint, reason } = await req.json();
 
     if (!isSuperAdminUser(adminRole, adminEmail)) {
       return NextResponse.json({ success: false, message: 'Access denied. Super Admin access required.' }, { status: 403 });
     }
 
+    const db = await getDb();
+
+    // 1. Unlink / Release Device Lock
+    if (action === 'unlink' || action === 'release_lock') {
+      if (!email && !deviceId && !deviceFingerprint) {
+        return NextResponse.json({ success: false, message: 'Email, Device ID, or Fingerprint is required to release device lock.' }, { status: 400 });
+      }
+
+      const result = await unlinkDeviceRecord(db, { email, deviceId, deviceFingerprint });
+      return NextResponse.json({
+        success: true,
+        message: `Device lock successfully released! ${email ? `(Email: ${email})` : ''} The user can now register or log in on this device.`,
+        result
+      });
+    }
+
+    // 2. Unblock Device
+    if (action === 'unblock') {
+      if (!deviceId && !deviceFingerprint) {
+        return NextResponse.json({ success: false, message: 'Device ID or Device Fingerprint is required to unblock a device.' }, { status: 400 });
+      }
+
+      const result = await unblockDevice(db, { deviceId, deviceFingerprint });
+      return NextResponse.json({
+        success: true,
+        message: 'Device has been successfully unblocked! Normal logins are restored for this device.',
+        result
+      });
+    }
+
+    // 3. Default: Permanent Block
     if (!deviceId && !deviceFingerprint) {
       return NextResponse.json({ success: false, message: 'Device ID or Device Fingerprint is required to block a device.' }, { status: 400 });
     }
 
-    const db = await getDb();
     const record = await blockDevicePermanently(db, {
       deviceId,
       deviceFingerprint,
@@ -367,7 +401,40 @@ export async function POST(req) {
       blockedRecord: record
     });
   } catch (err) {
-    console.error('Block device API error:', err);
+    console.error('Device action API error:', err);
     return NextResponse.json({ success: false, message: 'Server error: ' + err.message }, { status: 500 });
   }
 }
+
+// DELETE unlink / release device binding (Super Admin Only)
+export async function DELETE(req) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const adminRole = searchParams.get('adminRole') || '';
+    const adminEmail = searchParams.get('adminEmail') || '';
+    const email = searchParams.get('email') || '';
+    const deviceId = searchParams.get('deviceId') || '';
+    const deviceFingerprint = searchParams.get('deviceFingerprint') || '';
+
+    if (!isSuperAdminUser(adminRole, adminEmail)) {
+      return NextResponse.json({ success: false, message: 'Access denied. Super Admin access required.' }, { status: 403 });
+    }
+
+    if (!email && !deviceId && !deviceFingerprint) {
+      return NextResponse.json({ success: false, message: 'Email, Device ID, or Fingerprint is required to unlink a device.' }, { status: 400 });
+    }
+
+    const db = await getDb();
+    const result = await unlinkDeviceRecord(db, { email, deviceId, deviceFingerprint });
+
+    return NextResponse.json({
+      success: true,
+      message: `Device lock released successfully! ${email ? `(Email: ${email})` : ''}`,
+      result
+    });
+  } catch (err) {
+    console.error('Delete/unlink device API error:', err);
+    return NextResponse.json({ success: false, message: 'Server error: ' + err.message }, { status: 500 });
+  }
+}
+

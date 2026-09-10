@@ -315,3 +315,105 @@ export async function trackDeviceSession(db, { email, name, role, deviceId, devi
     }).catch(() => {});
   }
 }
+
+/**
+ * Unlinks / clears device binding from user(s) and sessions in MongoDB.
+ * Frees the device so new accounts can be registered from it without triggering the duplicate account error.
+ */
+export async function unlinkDeviceRecord(db, { email, deviceId, deviceFingerprint }) {
+  const cleanEmail = email ? String(email).toLowerCase().trim() : '';
+  const cleanId = deviceId ? String(deviceId).trim() : '';
+  const cleanFp = deviceFingerprint ? String(deviceFingerprint).trim() : '';
+
+  if (!cleanEmail && !cleanId && !cleanFp) {
+    throw new Error('Email, Device ID, or Fingerprint is required to unlink a device.');
+  }
+
+  // If email is provided, fetch user first to capture their deviceId and deviceFingerprint
+  let targetUser = null;
+  if (cleanEmail) {
+    targetUser = await db.collection('users').findOne({ email: cleanEmail });
+  }
+
+  const effectiveDeviceId = cleanId || (targetUser?.deviceId ? String(targetUser.deviceId).trim() : '');
+  const effectiveFingerprint = cleanFp || (targetUser?.deviceFingerprint ? String(targetUser.deviceFingerprint).trim() : '');
+
+  const userConditions = [];
+  if (cleanEmail) userConditions.push({ email: cleanEmail });
+  if (effectiveDeviceId) userConditions.push({ deviceId: effectiveDeviceId });
+  if (effectiveFingerprint) userConditions.push({ deviceFingerprint: effectiveFingerprint });
+
+  // 1. Unset deviceId & deviceFingerprint in users collection
+  const usersResult = await db.collection('users').updateMany(
+    { $or: userConditions },
+    {
+      $unset: {
+        deviceId: '',
+        deviceFingerprint: '',
+        registrationIp: '',
+        registrationUserAgent: ''
+      }
+    }
+  );
+
+  // 2. Remove from deviceSessions collection
+  const sessionConditions = [];
+  if (cleanEmail) sessionConditions.push({ email: cleanEmail });
+  if (effectiveDeviceId) sessionConditions.push({ deviceId: effectiveDeviceId });
+  if (effectiveFingerprint) sessionConditions.push({ deviceFingerprint: effectiveFingerprint });
+
+  const sessionResult = await db.collection('deviceSessions').deleteMany({
+    $or: sessionConditions
+  });
+
+  // 3. Also remove from blockedDevices if present
+  if (effectiveDeviceId || effectiveFingerprint) {
+    const blockConditions = [];
+    if (effectiveDeviceId) blockConditions.push({ deviceId: effectiveDeviceId });
+    if (effectiveFingerprint) blockConditions.push({ deviceFingerprint: effectiveFingerprint });
+    await db.collection('blockedDevices').deleteMany({
+      $or: blockConditions
+    });
+  }
+
+  return {
+    success: true,
+    matchedUsers: usersResult.matchedCount,
+    modifiedUsers: usersResult.modifiedCount,
+    deletedSessions: sessionResult.deletedCount,
+    unlinkedEmail: cleanEmail,
+    effectiveDeviceId,
+    effectiveFingerprint
+  };
+}
+
+/**
+ * Unblocks a permanently blocked device.
+ */
+export async function unblockDevice(db, { deviceId, deviceFingerprint }) {
+  const cleanId = deviceId ? String(deviceId).trim() : '';
+  const cleanFp = deviceFingerprint ? String(deviceFingerprint).trim() : '';
+
+  if (!cleanId && !cleanFp) {
+    throw new Error('Device ID or Fingerprint is required to unblock a device.');
+  }
+
+  const conditions = [];
+  if (cleanId) conditions.push({ deviceId: cleanId });
+  if (cleanFp) conditions.push({ deviceFingerprint: cleanFp });
+
+  const deleteResult = await db.collection('blockedDevices').deleteMany({
+    $or: conditions
+  });
+
+  await db.collection('deviceSessions').updateMany(
+    { $or: conditions },
+    { $set: { status: 'ACTIVE' }, $unset: { blockedAt: '' } }
+  );
+
+  return {
+    success: true,
+    unblockedCount: deleteResult.deletedCount
+  };
+}
+

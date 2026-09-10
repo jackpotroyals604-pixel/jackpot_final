@@ -86,6 +86,34 @@ export default function PlayerAccountsTab({ adminUser, onDeleteUser }) {
     }
   };
 
+  const handleUnlinkPlayerDevice = async (user) => {
+    if (!window.confirm(`Are you sure you want to release device lock for "${user.email}"? The player will be able to register a new account from their device.`)) {
+      return;
+    }
+    try {
+      const response = await fetch('/api/admin/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'unlink',
+          email: user.email,
+          adminRole: adminUser?.role || 'admin',
+          adminEmail: adminUser?.email || ''
+        })
+      });
+      const resData = await response.json();
+      if (resData.success) {
+        alert(`Device lock released successfully for "${user.email}"!`);
+        mutate();
+      } else {
+        alert(resData.message || 'Failed to release device lock.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error releasing device lock.');
+    }
+  };
+
   const handleManualRegister = async (e) => {
     e.preventDefault();
     if (!newName.trim() || !newEmail.trim()) {
@@ -356,6 +384,18 @@ export default function PlayerAccountsTab({ adminUser, onDeleteUser }) {
                           }}
                         >
                           {user.status === 'SUSPENDED' ? <i className="fa-solid fa-user-lock"></i> : <i className="fa-solid fa-ban"></i>}
+                        </button>
+                      )}
+
+                      {/* Unlink Device Lock */}
+                      {isManagerOrAdmin && (
+                        <button
+                          className="action-row-btn"
+                          onClick={() => handleUnlinkPlayerDevice(user)}
+                          title="Release Device Lock (Unlink Device)"
+                          style={{ background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8' }}
+                        >
+                          <i className="fa-solid fa-link-slash"></i>
                         </button>
                       )}
 

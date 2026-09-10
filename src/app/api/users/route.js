@@ -152,10 +152,10 @@ export async function GET(req) {
   }
 }
 
-// PUT update user details (Admin adjustment of coins or role modifications)
+// PUT update user details (Admin adjustment of coins, role modifications, or device unlinking)
 export async function PUT(req) {
   try {
-    const { email, coins, role, name, password, status, allowedGameIds } = await req.json();
+    const { email, coins, role, name, password, status, allowedGameIds, unlinkDevice } = await req.json();
 
     if (!email) {
       return NextResponse.json({ success: false, message: 'User email is required.' }, { status: 400 });
@@ -171,6 +171,7 @@ export async function PUT(req) {
     }
 
     const updateFields = {};
+    const unsetFields = {};
     let balanceChanged = false;
     const oldBalance = parseFloat(currentUser.coins || 0);
     let newBalance = oldBalance;
@@ -192,6 +193,15 @@ export async function PUT(req) {
     if (status !== undefined) {
       updateFields.status = status;
     }
+    if (unlinkDevice) {
+      unsetFields.deviceId = '';
+      unsetFields.deviceFingerprint = '';
+      unsetFields.registrationIp = '';
+      unsetFields.registrationUserAgent = '';
+      
+      // Also delete sessions
+      await db.collection('deviceSessions').deleteMany({ email: cleanEmail }).catch(() => {});
+    }
     if (allowedGameIds !== undefined) {
       const roleToCheck = role !== undefined ? role : currentUser.role;
       if (isCoinsAdminRole(roleToCheck)) {
@@ -206,10 +216,20 @@ export async function PUT(req) {
       }
     }
 
-    const result = await usersCollection.updateOne(
-      { email: cleanEmail },
-      { $set: updateFields }
-    );
+    const updateDoc = {};
+    if (Object.keys(updateFields).length > 0) {
+      updateDoc.$set = updateFields;
+    }
+    if (Object.keys(unsetFields).length > 0) {
+      updateDoc.$unset = unsetFields;
+    }
+
+    if (Object.keys(updateDoc).length > 0) {
+      await usersCollection.updateOne(
+        { email: cleanEmail },
+        updateDoc
+      );
+    }
 
     if (balanceChanged) {
       const diff = newBalance - oldBalance;
