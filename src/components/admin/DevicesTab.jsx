@@ -237,11 +237,6 @@ export default function DevicesTab({ adminUser }) {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            {isUpdating && (
-              <span style={{ fontSize: '0.725rem', color: '#facc15', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-                <i className="fa-solid fa-spinner fa-spin"></i> Updating...
-              </span>
-            )}
             <span style={{ background: 'rgba(250, 204, 21, 0.1)', border: '1px solid #facc15', color: '#facc15', padding: '0.3rem 0.75rem', borderRadius: '20px', fontSize: '0.725rem', fontWeight: 'bold' }}>
               👑 Super Admin Access Granted
             </span>
@@ -280,7 +275,7 @@ export default function DevicesTab({ adminUser }) {
         </div>
       </div>
 
-      {/* QUICK UNLINK BY EMAIL TOOL (Purana Email Se Device Hatayein) */}
+      {/* QUICK UNLINK BY EMAIL TOOL */}
       <div
         style={{
           background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%)',
@@ -296,11 +291,11 @@ export default function DevicesTab({ adminUser }) {
             <i className="fa-solid fa-link-slash"></i>
           </div>
           <h4 style={{ margin: 0, fontSize: '0.975rem', fontWeight: '800', color: '#fff' }}>
-            Release Device Lock by Email <span style={{ color: '#38bdf8', fontSize: '0.8rem', fontWeight: 'normal' }}>(Purana Email Daalkar Device Lock Remove Karein)</span>
+            Release Device Lock by Email <span style={{ color: '#38bdf8', fontSize: '0.8rem', fontWeight: 'normal' }}>(Remove Device Lock Using Player Email)</span>
           </h4>
         </div>
         <p style={{ margin: '0 0 0.85rem', fontSize: '0.775rem', color: '#cbd5e1', lineHeight: '1.4' }}>
-          Agar koi player purane email se login nahi kar pa raha hai aur uska device lock hai (<strong>&quot;Account Detected&quot;</strong> error aa raha hai), toh yahan uska purana email daalkar <strong>&quot;Release Device Lock&quot;</strong> par click karein. Isse us device ka lock hat jayega aur player naye account se register kar sakega.
+          If a player is unable to log in with their old email or receives the <strong>&quot;Account Detected&quot;</strong> device lock error, enter their registered email address below and click <strong>&quot;Release Device Lock&quot;</strong>. This unlinks the device and allows the player to register or link a new account immediately.
         </p>
 
         <form onSubmit={handleQuickUnlink} style={{ display: 'flex', flexWrap: 'wrap', gap: '0.65rem', alignItems: 'center' }}>

@@ -83,6 +83,7 @@ export default function SettingsTab({ onUpdateSettings }) {
     reader.onloadend = () => setAdPaymentQrCode(reader.result);
     reader.readAsDataURL(file);
   };
+  const handleAdQrChange = handleAdPaymentQrChange;
 
   const handleSettingsSubmit = async (e) => {
     e.preventDefault();
@@ -318,7 +319,16 @@ export default function SettingsTab({ onUpdateSettings }) {
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
               <input type="file" accept="image/*" onChange={handleAdQrChange} style={{ color: '#888', fontSize: '0.75rem' }} />
               {adPaymentQrCode && (
-                <img src={adPaymentQrCode} alt="Ads QR" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)' }} />
+                <div style={{ position: 'relative' }}>
+                  <img src={adPaymentQrCode} alt="Ads QR" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)' }} />
+                  <button
+                    type="button"
+                    onClick={() => setAdPaymentQrCode('')}
+                    style={{ position: 'absolute', top: '-5px', right: '-5px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', cursor: 'pointer' }}
+                  >
+                    &times;
+                  </button>
+                </div>
               )}
             </div>
           </div>
