@@ -157,6 +157,7 @@ async function ensureIndexes(db) {
 
   await db.collection('campaignRequests').createIndex({ status: 1, createdAt: -1 });
 
+  await db.collection('supportMessages').createIndex({ id: 1 }, { unique: true, sparse: true });
   await db.collection('supportMessages').createIndex({ distributorId: 1, read: 1, senderType: 1 });
   await db.collection('supportMessages').createIndex({ userEmail: 1, timestamp: -1 });
   await db.collection('supportMessages').createIndex({ timestamp: 1 });

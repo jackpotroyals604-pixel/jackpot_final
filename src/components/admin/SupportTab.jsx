@@ -233,6 +233,33 @@ export default function SupportTab({ adminUser }) {
 
   const handleToggleReaction = async (messageId, emoji) => {
     if (!adminUser) return;
+    const adminEmail = (adminUser.email || '').toLowerCase().trim();
+
+    // Optimistically toggle reaction immediately in UI
+    mutateActiveChat(
+      (curr) => ({
+        ...curr,
+        messages: (curr?.messages || []).map((m) => {
+          if (m.id !== messageId) return m;
+          const reactions = { ...(m.reactions || {}) };
+          const list = Array.isArray(reactions[emoji]) ? [...reactions[emoji]] : [];
+          let updatedList;
+          if (list.includes(adminEmail)) {
+            updatedList = list.filter((e) => e !== adminEmail);
+          } else {
+            updatedList = [...list, adminEmail];
+          }
+          if (updatedList.length === 0) {
+            delete reactions[emoji];
+          } else {
+            reactions[emoji] = updatedList;
+          }
+          return { ...m, reactions };
+        })
+      }),
+      false
+    );
+
     try {
       const res = await fetch('/api/support', {
         method: 'PATCH',
@@ -245,7 +272,7 @@ export default function SupportTab({ adminUser }) {
         })
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.reactions) {
         mutateActiveChat(
           (curr) => ({
             ...curr,
@@ -258,6 +285,7 @@ export default function SupportTab({ adminUser }) {
       }
     } catch (err) {
       console.error('Toggle reaction error:', err);
+      mutateActiveChat();
     }
   };
 
@@ -280,6 +308,17 @@ export default function SupportTab({ adminUser }) {
 
   const handleDeleteForMe = async (msgId) => {
     if (!adminUser) return;
+    setDeleteModalMsg(null);
+
+    // Optimistically remove message immediately from UI
+    mutateActiveChat(
+      (curr) => ({
+        ...curr,
+        messages: (curr?.messages || []).filter((m) => m.id !== msgId)
+      }),
+      false
+    );
+
     try {
       const res = await fetch('/api/support', {
         method: 'PATCH',
@@ -291,24 +330,32 @@ export default function SupportTab({ adminUser }) {
         })
       });
       const data = await res.json();
-      if (data.success) {
-        mutateActiveChat(
-          (curr) => ({
-            ...curr,
-            messages: (curr?.messages || []).filter((m) => m.id !== msgId)
-          }),
-          false
-        );
+      if (!data.success) {
+        mutateActiveChat();
       }
     } catch (err) {
       console.error('Delete for me error:', err);
-    } finally {
-      setDeleteModalMsg(null);
+      mutateActiveChat();
     }
   };
 
   const handleDeleteForEveryone = async (msgId) => {
     if (!adminUser) return;
+    setDeleteModalMsg(null);
+
+    // Optimistically mark deleted immediately in UI
+    mutateActiveChat(
+      (curr) => ({
+        ...curr,
+        messages: (curr?.messages || []).map((m) =>
+          m.id === msgId
+            ? { ...m, message: 'This message was deleted', isDeleted: true, attachment: '' }
+            : m
+        )
+      }),
+      false
+    );
+
     try {
       const res = await fetch('/api/support', {
         method: 'PATCH',
@@ -320,23 +367,12 @@ export default function SupportTab({ adminUser }) {
         })
       });
       const data = await res.json();
-      if (data.success) {
-        mutateActiveChat(
-          (curr) => ({
-            ...curr,
-            messages: (curr?.messages || []).map((m) =>
-              m.id === msgId
-                ? { ...m, message: 'This message was deleted', isDeleted: true, attachment: '' }
-                : m
-            )
-          }),
-          false
-        );
+      if (!data.success) {
+        mutateActiveChat();
       }
     } catch (err) {
       console.error('Delete for everyone error:', err);
-    } finally {
-      setDeleteModalMsg(null);
+      mutateActiveChat();
     }
   };
 
@@ -369,15 +405,47 @@ export default function SupportTab({ adminUser }) {
     const textToSend = typeof customText === 'string' ? customText.trim() : adminReplyText.trim();
     if ((!textToSend && !adminAttachment) || !activeChatEmail || !adminUser || isSendingReply) return;
 
-    setIsSendingReply(true);
-
     if (editingMsg) {
       const editedText = textToSend;
+      if (!editedText) return;
+      const targetId = editingMsg.id;
+      const prevMessage = editingMsg;
+
+      // 1. Immediately reset form state — no blocking spinner or lag
       setAdminReplyText('');
       setOutboundPreview(null);
-      const targetId = editingMsg.id;
       setEditingMsg(null);
+      setIsSendingReply(false);
 
+      // 2. Instantly update active chat optimistically in UI (0ms latency)
+      mutateActiveChat(
+        (curr) => ({
+          ...curr,
+          messages: (curr?.messages || []).map((m) => {
+            if (m.id === targetId) {
+              return {
+                ...m,
+                message: editedText,
+                isEdited: true,
+                editedAt: new Date().toISOString()
+              };
+            }
+            if (m.replyTo?.id === targetId) {
+              return {
+                ...m,
+                replyTo: {
+                  ...m.replyTo,
+                  message: editedText
+                }
+              };
+            }
+            return m;
+          })
+        }),
+        false
+      );
+
+      // 3. Persist edit in background
       try {
         const response = await fetch('/api/support', {
           method: 'PATCH',
@@ -390,24 +458,33 @@ export default function SupportTab({ adminUser }) {
           })
         });
         const data = await response.json();
-        if (data.success) {
+        if (!data.success) {
+          // Revert if server failed
           mutateActiveChat(
             (curr) => ({
               ...curr,
-              messages: (curr?.messages || []).map((m) =>
-                m.id === targetId ? { ...m, message: editedText, isEdited: true } : m
-              )
+              messages: (curr?.messages || []).map((m) => (m.id === targetId ? prevMessage : m))
             }),
             false
           );
+          alert(data.message || 'Failed to edit message.');
+        } else {
+          mutateActiveChat();
         }
       } catch (err) {
         console.error('Edit support msg error:', err);
-      } finally {
-        setIsSendingReply(false);
+        mutateActiveChat(
+          (curr) => ({
+            ...curr,
+            messages: (curr?.messages || []).map((m) => (m.id === targetId ? prevMessage : m))
+          }),
+          false
+        );
       }
       return;
     }
+
+    setIsSendingReply(true);
 
     let finalMessage = textToSend;
 

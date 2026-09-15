@@ -205,6 +205,12 @@ export function SupportModal({ isOpen, onClose, currentUser, onMessagesSeen }) {
 
   const handleDeleteForMe = async (msgId) => {
     const { email: userEmail } = getChatIdentity();
+    setDeleteModalMsg(null);
+    const prevMessages = messages;
+
+    // Optimistically remove from UI
+    setMessages((prev) => prev.filter((m) => m.id !== msgId));
+
     try {
       const res = await fetch('/api/support', {
         method: 'PATCH',
@@ -216,18 +222,29 @@ export function SupportModal({ isOpen, onClose, currentUser, onMessagesSeen }) {
         })
       });
       const data = await res.json();
-      if (data.success) {
-        setMessages((prev) => prev.filter((m) => m.id !== msgId));
+      if (!data.success) {
+        setMessages(prevMessages);
       }
     } catch (err) {
       console.error('Delete for me error:', err);
-    } finally {
-      setDeleteModalMsg(null);
+      setMessages(prevMessages);
     }
   };
 
   const handleDeleteForEveryone = async (msgId) => {
     const { email: userEmail } = getChatIdentity();
+    setDeleteModalMsg(null);
+    const prevMessages = messages;
+
+    // Optimistically update to deleted message in UI
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === msgId
+          ? { ...m, message: 'This message was deleted', isDeleted: true, attachment: '' }
+          : m
+      )
+    );
+
     try {
       const res = await fetch('/api/support', {
         method: 'PATCH',
@@ -239,19 +256,12 @@ export function SupportModal({ isOpen, onClose, currentUser, onMessagesSeen }) {
         })
       });
       const data = await res.json();
-      if (data.success) {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === msgId
-              ? { ...m, message: 'This message was deleted', isDeleted: true, attachment: '' }
-              : m
-          )
-        );
+      if (!data.success) {
+        setMessages(prevMessages);
       }
     } catch (err) {
       console.error('Delete for everyone error:', err);
-    } finally {
-      setDeleteModalMsg(null);
+      setMessages(prevMessages);
     }
   };
 
@@ -262,10 +272,29 @@ export function SupportModal({ isOpen, onClose, currentUser, onMessagesSeen }) {
     const { email: userEmail, name: userName } = getChatIdentity();
 
     if (editingMsg) {
-      const editedText = input;
-      setInput('');
+      const editedText = input.trim();
+      if (!editedText) return;
       const targetId = editingMsg.id;
+      const prevMessages = messages;
+
+      // 1. Immediately reset form state — 0ms UI response
+      setInput('');
       setEditingMsg(null);
+
+      // 2. Instantly update messages in UI
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id === targetId) {
+            return { ...m, message: editedText, isEdited: true, editedAt: new Date().toISOString() };
+          }
+          if (m.replyTo?.id === targetId) {
+            return { ...m, replyTo: { ...m.replyTo, message: editedText } };
+          }
+          return m;
+        })
+      );
+
+      // 3. Sync to server in background
       try {
         const response = await fetch('/api/support', {
           method: 'PATCH',
@@ -278,15 +307,13 @@ export function SupportModal({ isOpen, onClose, currentUser, onMessagesSeen }) {
           })
         });
         const data = await response.json();
-        if (data.success) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === targetId ? { ...m, message: editedText.trim(), isEdited: true } : m
-            )
-          );
+        if (!data.success) {
+          setMessages(prevMessages);
+          alert(data.message || 'Failed to edit message.');
         }
       } catch (err) {
         console.error('Edit support msg error:', err);
+        setMessages(prevMessages);
       }
       return;
     }

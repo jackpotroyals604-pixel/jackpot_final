@@ -497,7 +497,10 @@ export async function PATCH(req) {
 
     const db = await getDb();
     const supportCollection = db.collection('supportMessages');
-    const msg = await supportCollection.findOne({ id: String(messageId) });
+    const msg = await supportCollection.findOne(
+      { id: String(messageId) },
+      { projection: { id: 1, distributorId: 1, reactions: 1, deletedFor: 1 } }
+    );
 
     if (!msg) {
       return NextResponse.json({ success: false, message: 'Message not found.' }, { status: 404 });
