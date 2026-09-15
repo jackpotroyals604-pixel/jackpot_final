@@ -198,10 +198,15 @@ export async function POST(req) {
     const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '';
     const userAgent = req.headers.get('user-agent') || '';
 
+    const envAdminEmails = [
+      process.env.ADMIN_EMAIL,
+      process.env.NEXT_PUBLIC_ADMIN_EMAIL
+    ].map((e) => String(e || '').toLowerCase().trim()).filter(Boolean);
+
     trackDeviceSession(db, {
       email: cleanEmail,
       name: user?.name || cleanEmail.split('@')[0],
-      role: user?.role || (cleanEmail === (process.env.ADMIN_EMAIL || '').toLowerCase() ? 'admin' : 'staff'),
+      role: user?.role || (envAdminEmails.includes(cleanEmail) ? 'admin' : 'staff'),
       userAgent,
       ip
     }).catch(() => {});

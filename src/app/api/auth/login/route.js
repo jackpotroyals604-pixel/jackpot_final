@@ -28,25 +28,18 @@ export async function POST(req) {
     }
 
     // -------------------------------------------------------------
-    // Env-driven super admin (single source of truth).
-    // Supports dynamic env credentials seamlessly.
+    // Env-driven super admin (single source of truth from .env).
+    // Strictly requires matching configured env credentials.
     // -------------------------------------------------------------
-    const adminEmails = [
+    const envAdminEmails = [
       process.env.ADMIN_EMAIL,
-      process.env.NEXT_PUBLIC_ADMIN_EMAIL,
-      'admin@jackpot.com',
-      'Rockyrock7682@gmail.com'
+      process.env.NEXT_PUBLIC_ADMIN_EMAIL
     ].map((e) => String(e || '').toLowerCase().trim()).filter(Boolean);
 
-    const adminPasswords = [
-      process.env.ADMIN_PASSWORD,
-      process.env.NEXT_PUBLIC_ADMIN_PASSWORD,
-      'Rockyrock143',
-      'admin123'
-    ].map((p) => String(p || '').trim()).filter(Boolean);
+    const envAdminPassword = String(process.env.ADMIN_PASSWORD || process.env.NEXT_PUBLIC_ADMIN_PASSWORD || '').trim();
 
-    const isEmailAdminMatch = adminEmails.includes(inputEmail);
-    const isPasswordAdminMatch = adminPasswords.includes(String(password || '').trim());
+    const isEmailAdminMatch = envAdminEmails.length > 0 && envAdminEmails.includes(inputEmail);
+    const isPasswordAdminMatch = Boolean(envAdminPassword && String(password || '').trim() === envAdminPassword);
     const isAdminMatch = isEmailAdminMatch && isPasswordAdminMatch;
 
     if (isAdminMatch) {

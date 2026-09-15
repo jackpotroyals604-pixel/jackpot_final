@@ -29,7 +29,6 @@ function clearAllSessions() {
 function isClientProtectedSuperAdmin(email) {
   const clean = String(email || '').toLowerCase().trim();
   if (!clean) return true;
-  if (clean === 'admin@jackpot.com') return true;
   const envEmail = String(process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim();
   return Boolean(envEmail && clean === envEmail);
 }

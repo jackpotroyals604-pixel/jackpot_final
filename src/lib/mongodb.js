@@ -19,7 +19,6 @@ const MONGODB_URI = getMongoUri();
 // Default initial data for seeding
 const DEFAULT_SEEDS = {
   users: [
-    { name: 'System Admin', email: 'admin@jackpot.com', password: 'admin123', role: 'admin' },
     { name: 'Demo Player', email: 'player@test.com', password: 'password123', role: 'user' }
   ],
   games: [

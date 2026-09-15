@@ -68,7 +68,7 @@ export default function WebsitePaymentsTab({
           id: tx.id,
           status: 'SUCCESS',
           note: 'Confirmed by Admin',
-          processedBy: adminUser?.email || 'admin@jackpot.com'
+          processedBy: adminUser?.email || 'admin'
         })
       });
       const resData = await response.json();
@@ -97,7 +97,7 @@ export default function WebsitePaymentsTab({
           id: tx.id,
           status: 'FAILED',
           note: feedbackMsg || 'Rejected by Admin',
-          processedBy: adminUser?.email || 'admin@jackpot.com'
+          processedBy: adminUser?.email || 'admin'
         })
       });
       const resData = await response.json();
@@ -159,7 +159,7 @@ export default function WebsitePaymentsTab({
       payoutProof: payoutProof || '',
       payoutSent: sentVal,
       payoutHold: holdVal,
-      processedBy: adminUser?.email || 'admin@jackpot.com'
+      processedBy: adminUser?.email || 'admin'
     };
     if (holdVal > 0) {
       payload.remainderWaitHours = Math.max(0, Number(remainderWaitHours) || 0);
@@ -217,7 +217,7 @@ export default function WebsitePaymentsTab({
           id: tx.id,
           status: 'FAILED',
           note: feedbackMsg || 'Declined by Admin',
-          processedBy: adminUser?.email || 'admin@jackpot.com'
+          processedBy: adminUser?.email || 'admin'
         })
       });
       const resData = await response.json();

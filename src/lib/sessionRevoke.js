@@ -6,8 +6,7 @@ const revokeKey = (email) => `session_revoked_${String(email || '').toLowerCase(
 export function getEnvSuperAdminEmails() {
   const list = [
     process.env.ADMIN_EMAIL,
-    process.env.NEXT_PUBLIC_ADMIN_EMAIL,
-    'admin@jackpot.com'
+    process.env.NEXT_PUBLIC_ADMIN_EMAIL
   ];
   return Array.from(
     new Set(
@@ -18,7 +17,7 @@ export function getEnvSuperAdminEmails() {
 
 export function getEnvSuperAdminEmail() {
   const emails = getEnvSuperAdminEmails();
-  return emails[0] || 'admin@jackpot.com';
+  return emails[0] || '';
 }
 
 /** True for the env super admin or the legacy hard-coded admin identity. */

@@ -166,7 +166,7 @@ if (typeof window !== 'undefined') {
     }
 
     if (!userEmail && (isPortalNative() || (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')))) {
-      userEmail = 'Rockyrock7682@gmail.com';
+      userEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || '';
       audience = 'staff';
     }
 
@@ -550,7 +550,7 @@ export async function subscribeToStaffPush(userEmail) {
     } catch {}
   }
   if (!email) {
-    email = 'Rockyrock7682@gmail.com';
+    email = process.env.NEXT_PUBLIC_ADMIN_EMAIL || '';
   }
 
   if (isNativePlatform()) {

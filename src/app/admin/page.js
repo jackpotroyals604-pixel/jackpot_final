@@ -66,11 +66,11 @@ export default function AdminPage({ portalName, forcedRole }) {
         }
       } catch (e) {
         setAuthenticated(true);
-        setAdminUser({ name: 'System Admin', email: process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'Rockyrock7682@gmail.com', role: 'admin' });
+        setAdminUser({ name: 'System Admin', email: process.env.NEXT_PUBLIC_ADMIN_EMAIL || '', role: 'admin' });
       }
     } else if (adminSession === 'active') {
       setAuthenticated(true);
-      setAdminUser({ name: 'System Admin', email: process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'Rockyrock7682@gmail.com', role: 'admin' });
+      setAdminUser({ name: 'System Admin', email: process.env.NEXT_PUBLIC_ADMIN_EMAIL || '', role: 'admin' });
     }
 
     // Multi-tab Real-Time Synchronization Listener
@@ -82,7 +82,7 @@ export default function AdminPage({ portalName, forcedRole }) {
           try {
             setAdminUser(JSON.parse(sess));
           } catch (err) {
-            setAdminUser({ name: 'System Admin', email: process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'Rockyrock7682@gmail.com', role: 'admin' });
+            setAdminUser({ name: 'System Admin', email: process.env.NEXT_PUBLIC_ADMIN_EMAIL || '', role: 'admin' });
           }
         } else {
           setAuthenticated(false);
@@ -271,7 +271,7 @@ export default function AdminPage({ portalName, forcedRole }) {
       const response = await fetch('/api/coins-notifications', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, status, read, holdNote, processedBy: adminUser?.email || 'admin@jackpot.com', adminEmail: adminUser?.email || '' })
+        body: JSON.stringify({ id, status, read, holdNote, processedBy: adminUser?.email || 'admin', adminEmail: adminUser?.email || '' })
       });
       const data = await response.json();
       if (data.success) {
@@ -411,7 +411,7 @@ export default function AdminPage({ portalName, forcedRole }) {
           status: 'READY',
           gameAccountUsername: credData.username,
           gameAccountPassword: credData.password,
-          processedBy: adminUser?.email || 'admin@jackpot.com',
+          processedBy: adminUser?.email || 'admin',
           adminEmail: adminUser?.email || ''
         })
       });
@@ -446,7 +446,7 @@ export default function AdminPage({ portalName, forcedRole }) {
       const response = await fetch('/api/transactions', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: txId, status: 'SUCCESS', processedBy: adminUser?.email || 'admin@jackpot.com' })
+        body: JSON.stringify({ id: txId, status: 'SUCCESS', processedBy: adminUser?.email || 'admin' })
       });
       const data = await response.json();
       if (data.success) {
@@ -499,7 +499,7 @@ export default function AdminPage({ portalName, forcedRole }) {
       const response = await fetch('/api/transactions', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: txId, status: 'FAILED', note: feedbackMsg || 'Declined by Admin', processedBy: adminUser?.email || 'admin@jackpot.com' })
+        body: JSON.stringify({ id: txId, status: 'FAILED', note: feedbackMsg || 'Declined by Admin', processedBy: adminUser?.email || 'admin' })
       });
       const data = await response.json();
       if (data.success) {
@@ -668,7 +668,7 @@ export default function AdminPage({ portalName, forcedRole }) {
                   <input
                     type="email"
                     id="admin-email"
-                    placeholder="admin@jackpot.com"
+                    placeholder="admin@example.com"
                     value={adminEmail}
                     onChange={(e) => { setAdminEmail(e.target.value); setLoginError(''); }}
                     required

@@ -100,7 +100,7 @@ export default function TxSearchTab({ onInspectProof, adminUser }) {
           payoutHold: 0,
           note: holdNote.trim() || `Remaining hold payout completed directly`,
           payoutProof: holdPayoutProof || '',
-          processedBy: adminUser?.email || 'admin@jackpot.com'
+          processedBy: adminUser?.email || 'admin'
         })
       });
 

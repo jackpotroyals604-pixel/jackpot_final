@@ -149,7 +149,7 @@ export default function LedgerTab({
       note: payoutCustomNote.trim() || `Payout processed to ${payoutGateway}`,
       payoutSent: sentVal,
       payoutHold: holdVal,
-      processedBy: adminUser?.email || 'admin@jackpot.com',
+      processedBy: adminUser?.email || 'admin',
       payoutProof: payoutProof || ''
     };
     if (holdVal > 0) {

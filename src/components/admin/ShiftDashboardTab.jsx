@@ -177,7 +177,7 @@ export default function ShiftDashboardTab({ adminUser }) {
           status: 'READY',
           gameAccountUsername: username,
           gameAccountPassword: password,
-          processedBy: adminUser?.email || 'admin@jackpot.com',
+          processedBy: adminUser?.email || 'admin',
           adminEmail: adminUser?.email || ''
         })
       });
@@ -312,7 +312,7 @@ export default function ShiftDashboardTab({ adminUser }) {
           id: notiId,
           status: 'COMPLETED',
           read: true,
-          processedBy: adminUser?.email || 'admin@jackpot.com',
+          processedBy: adminUser?.email || 'admin',
           adminEmail: adminUser?.email || ''
         })
       });
@@ -397,7 +397,7 @@ export default function ShiftDashboardTab({ adminUser }) {
           status: 'HOLD',
           read: true,
           holdNote: reason,
-          processedBy: adminUser?.email || 'admin@jackpot.com',
+          processedBy: adminUser?.email || 'admin',
           adminEmail: adminUser?.email || ''
         })
       });
@@ -474,7 +474,7 @@ export default function ShiftDashboardTab({ adminUser }) {
           status: 'CANCELLED',
           read: true,
           holdNote: 'Cancelled by Administrator',
-          processedBy: adminUser?.email || 'admin@jackpot.com',
+          processedBy: adminUser?.email || 'admin',
           adminEmail: adminUser?.email || ''
         })
       });

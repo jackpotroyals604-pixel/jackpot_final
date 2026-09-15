@@ -76,7 +76,7 @@ export default function AdminDashboard({
       } catch {}
     }
     if (!email) {
-      email = 'Rockyrock7682@gmail.com';
+      email = process.env.NEXT_PUBLIC_ADMIN_EMAIL || '';
     }
 
     setPushSyncState({ loading: true, success: false, message: '' });

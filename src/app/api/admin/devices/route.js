@@ -8,8 +8,7 @@ function isSuperAdminUser(adminRole, adminEmail) {
   if (!clean) return false;
   const allowed = [
     (process.env.ADMIN_EMAIL || '').toLowerCase().trim(),
-    (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim(),
-    'admin@jackpot.com'
+    (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim()
   ].filter(Boolean);
   return allowed.includes(clean);
 }
@@ -38,7 +37,7 @@ export async function GET(req) {
     // 1. Automatically register/update the Super Admin's current device session
     const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'Current Session';
     const userAgent = req.headers.get('user-agent') || '';
-    const envAdminEmail = (process.env.ADMIN_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'admin@jackpot.com').toLowerCase().trim();
+    const envAdminEmail = (process.env.ADMIN_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim();
     const adminEmailClean = String(adminEmail || envAdminEmail).toLowerCase().trim();
 
     await trackDeviceSession(db, {
