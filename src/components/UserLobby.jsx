@@ -1698,7 +1698,10 @@ export default function UserLobby({
             <h2 className="lobby-brand-title">
               JACKPOT<span className="gold-accent">ROYALS</span>
             </h2>
-            <p className="lobby-brand-tagline">PLAY SMARTER. CASHOUT FASTER.</p>
+            <div className="lobby-brand-casino-badge">
+              <span className="lobby-live-dot" aria-hidden="true" />
+              <span className="lobby-casino-text">CASINO</span>
+            </div>
           </div>
         </div>
 

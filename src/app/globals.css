@@ -1057,7 +1057,10 @@ select option {
 }
 
 .lobby-brand-names {
-  line-height: 1.2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.15;
 }
 
 .lobby-brand-title {
@@ -1066,12 +1069,54 @@ select option {
   font-weight: 900;
   letter-spacing: 0.05em;
   color: #ffffff;
+  line-height: 1;
 }
 
 .gold-accent {
   background: var(--gold-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+.lobby-brand-casino-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+}
+
+.lobby-live-dot {
+  width: 6.5px;
+  height: 6.5px;
+  border-radius: 50%;
+  background-color: #22c55e;
+  box-shadow: 0 0 6px #22c55e, 0 0 10px rgba(34, 197, 94, 0.6);
+  display: inline-block;
+  flex-shrink: 0;
+  animation: liveGreenBlink 1.4s infinite ease-in-out;
+}
+
+.lobby-casino-text {
+  font-family: var(--font-heading, inherit);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  color: #22c55e;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+@keyframes liveGreenBlink {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 6px #22c55e, 0 0 10px rgba(34, 197, 94, 0.7);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(0.75);
+    box-shadow: 0 0 2px #22c55e;
+  }
 }
 
 .lobby-brand-tagline {
@@ -4200,6 +4245,23 @@ dialog::backdrop {
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 42vw;
+  }
+
+  .lobby-brand-casino-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 1px;
+  }
+
+  .lobby-live-dot {
+    width: 5.5px;
+    height: 5.5px;
+  }
+
+  .lobby-casino-text {
+    font-size: 0.52rem;
+    letter-spacing: 0.18em;
   }
 
   .lobby-brand-tagline {
