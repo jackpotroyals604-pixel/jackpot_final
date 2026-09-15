@@ -827,6 +827,8 @@ export async function PUT(req) {
           );
           const distId = referrerUser ? (referrerUser.distributorId || '') : '';
           const txId = (Date.now() + Math.floor(Math.random() * 100)).toString();
+          const coinId = Date.now().toString() + Math.floor(Math.random() * 100 + 1).toString();
+          const rewardCoinsNum = Number(refDoc.rewardCoins);
 
           await Promise.all([
             db.collection('transactions').insertOne({
@@ -835,7 +837,7 @@ export async function PUT(req) {
               date: new Date().toISOString(),
               createdAt: new Date().toISOString(),
               type: 'BONUS',
-              amount: Number(refDoc.rewardCoins),
+              amount: rewardCoinsNum,
               gateway: 'REFERRAL BONUS',
               code: 'REFERRAL',
               status: 'SUCCESS',
@@ -844,12 +846,12 @@ export async function PUT(req) {
               distributorId: distId
             }),
             db.collection('coinsNotifications').insertOne({
-              id: Date.now().toString() + Math.floor(Math.random() * 100 + 1).toString(),
+              id: coinId,
               userEmail: refEmail,
               gameTitle: gameTitleForRef,
               depositAmount: 0,
               bonusApplied: -2,
-              totalCoins: Number(refDoc.rewardCoins),
+              totalCoins: rewardCoinsNum,
               status: 'PENDING',
               read: false,
               timestamp: new Date().toISOString(),
@@ -861,6 +863,27 @@ export async function PUT(req) {
               { $set: { status: 'CLAIMED', claimedAt: new Date().toISOString() } }
             )
           ]);
+
+          cache.del('admin_stats');
+          publishAdminEvent('coins', {
+            distributorId: distId,
+            gameTitle: gameTitleForRef,
+            coins: rewardCoinsNum
+          });
+          publishAdminEvent('transactions', {
+            distributorId: distId
+          });
+
+          notifyStaffAndDistributorAsync(db, {
+            title: 'New Coins Request (Referral Bonus)',
+            body: `${refEmail} · ${rewardCoinsNum} coins · ${gameTitleForRef}`,
+            adminUrl: '/admin/coins',
+            distributorUrl: '/distributor/coins',
+            url: '/admin/coins',
+            tag: `coin-${coinId}`,
+            gameTitle: gameTitleForRef,
+            alertKind: 'coins'
+          }, distId);
         } catch (refErr) {
           console.error('Failed to auto-allot referral bonus upon account request approval:', refErr);
         }

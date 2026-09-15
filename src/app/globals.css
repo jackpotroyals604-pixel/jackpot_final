@@ -1098,12 +1098,13 @@ select option {
 
 .lobby-casino-text {
   font-family: var(--font-heading, inherit);
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   font-weight: 800;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.16em;
   color: #22c55e;
   text-transform: uppercase;
   line-height: 1;
+  white-space: nowrap;
 }
 
 @keyframes liveGreenBlink {
@@ -4260,8 +4261,9 @@ dialog::backdrop {
   }
 
   .lobby-casino-text {
-    font-size: 0.52rem;
-    letter-spacing: 0.18em;
+    font-size: 0.48rem;
+    letter-spacing: 0.12em;
+    white-space: nowrap;
   }
 
   .lobby-brand-tagline {

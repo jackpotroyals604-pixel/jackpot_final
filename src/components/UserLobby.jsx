@@ -1700,7 +1700,7 @@ export default function UserLobby({
             </h2>
             <div className="lobby-brand-casino-badge">
               <span className="lobby-live-dot" aria-hidden="true" />
-              <span className="lobby-casino-text">CASINO</span>
+              <span className="lobby-casino-text">ONLINE CASINO</span>
             </div>
           </div>
         </div>

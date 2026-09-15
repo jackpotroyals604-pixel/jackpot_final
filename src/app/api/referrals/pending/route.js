@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '../../../../lib/mongodb';
 import { cache } from '../../../../lib/cache';
+import { publishAdminEvent } from '../../../../lib/adminEvents';
+import { notifyStaffAndDistributorAsync } from '../../../../lib/pushNotifications';
 
 // GET pending referral rewards for a referrer
 export async function GET(req) {
@@ -48,6 +50,7 @@ export async function POST(req) {
     const gameAccountsCollection = db.collection('gameAccounts');
     const accountRequestsCollection = db.collection('accountRequests');
     const coinsNotificationsCollection = db.collection('coinsNotifications');
+    const transactionsCollection = db.collection('transactions');
 
     // 1. Get the pending reward
     const referral = await pendingCollection.findOne({ id });
@@ -61,10 +64,16 @@ export async function POST(req) {
 
     const cleanReferrerEmail = referral.referrerEmail.toLowerCase().trim();
 
-    // Fetch referrer's profile to extract distributorId
+    // Fetch referrer's profile to extract distributorId and name
     const usersCollection = db.collection('users');
     const referrerUser = await usersCollection.findOne({ email: cleanReferrerEmail });
     const distId = referrerUser ? (referrerUser.distributorId || '') : '';
+    let playerDisplayName = cleanReferrerEmail;
+    if (referrerUser?.name && referrerUser.name.trim() && referrerUser.name.trim() !== '-' && referrerUser.name.trim() !== '—') {
+      playerDisplayName = referrerUser.name.trim();
+    }
+
+    const rewardCoinsNum = Number(referral.rewardCoins || 0);
 
     // 2. Check if referrer has a game account for gameTitle
     const account = await gameAccountsCollection.findOne({
@@ -73,25 +82,65 @@ export async function POST(req) {
     });
 
     if (account) {
-      // Direct allotment since game account exists
-      await coinsNotificationsCollection.insertOne({
-        id: Date.now().toString() + Math.floor(Math.random() * 100 + 1).toString(),
-        userEmail: cleanReferrerEmail,
-        gameTitle: gameTitle,
-        depositAmount: 0,
-        bonusApplied: -2, // -2 indicates Referral Reward
-        totalCoins: Number(referral.rewardCoins),
-        status: 'PENDING',
-        read: false,
-        timestamp: new Date().toISOString(),
-        distributorId: distId
-      });
+      const txId = (Date.now() + Math.floor(Math.random() * 100)).toString();
+      const coinId = Date.now().toString() + Math.floor(Math.random() * 100 + 1).toString();
 
-      // Mark as CLAIMED
-      await pendingCollection.updateOne({ id }, { $set: { status: 'CLAIMED', claimedAt: new Date().toISOString() } });
+      // Direct allotment since game account exists
+      await Promise.all([
+        transactionsCollection.insertOne({
+          id: txId,
+          userEmail: cleanReferrerEmail,
+          date: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          type: 'BONUS',
+          amount: rewardCoinsNum,
+          gateway: 'REFERRAL BONUS',
+          code: 'REFERRAL',
+          status: 'SUCCESS',
+          gameTitle: gameTitle,
+          note: `Referral reward for inviting ${referral.refereeEmail || ''}`,
+          distributorId: distId
+        }),
+        coinsNotificationsCollection.insertOne({
+          id: coinId,
+          userEmail: cleanReferrerEmail,
+          gameTitle: gameTitle,
+          depositAmount: 0,
+          bonusApplied: -2, // -2 indicates Referral Reward
+          totalCoins: rewardCoinsNum,
+          status: 'PENDING',
+          read: false,
+          timestamp: new Date().toISOString(),
+          transactionId: txId,
+          distributorId: distId
+        }),
+        pendingCollection.updateOne({ id }, { $set: { status: 'CLAIMED', claimedAt: new Date().toISOString() } })
+      ]);
 
       // Invalidate stats cache
       cache.del('admin_stats');
+
+      // Publish real-time events to update queue badges and play notification sound on admin/distributor dashboards
+      publishAdminEvent('coins', {
+        distributorId: distId,
+        gameTitle: gameTitle,
+        coins: rewardCoinsNum
+      });
+      publishAdminEvent('transactions', {
+        distributorId: distId
+      });
+
+      // Send lock-screen push notification to Staff & Distributor APKs
+      notifyStaffAndDistributorAsync(db, {
+        title: 'New Coins Request (Referral Bonus)',
+        body: `${playerDisplayName} · ${rewardCoinsNum} coins · ${gameTitle}`,
+        adminUrl: '/admin/coins',
+        distributorUrl: '/distributor/coins',
+        url: '/admin/coins',
+        tag: `coin-${coinId}`,
+        gameTitle: gameTitle,
+        alertKind: 'coins'
+      }, distId);
 
       return NextResponse.json({
         success: true,
@@ -106,9 +155,11 @@ export async function POST(req) {
         status: 'PENDING'
       });
 
+      let requestId = existingRequest?.id;
+
       if (!existingRequest) {
         // Create game account request first
-        const requestId = Date.now().toString() + Math.floor(Math.random() * 100).toString();
+        requestId = Date.now().toString() + Math.floor(Math.random() * 100).toString();
         await accountRequestsCollection.insertOne({
           id: requestId,
           gameTitle,
@@ -132,6 +183,24 @@ export async function POST(req) {
 
       // Invalidate stats cache
       cache.del('admin_stats');
+
+      // Publish real-time event to trigger notification sound & badge counter on dashboard
+      publishAdminEvent('requests', {
+        distributorId: distId || '',
+        gameTitle: gameTitle
+      });
+
+      // Send lock-screen push notification to Staff & Distributor APKs
+      notifyStaffAndDistributorAsync(db, {
+        title: 'New Account Request (Referral)',
+        body: `${playerDisplayName} · ${gameTitle} · ${rewardCoinsNum} coins waiting`,
+        adminUrl: '/admin/requests',
+        distributorUrl: '/distributor/requests',
+        url: '/admin/requests',
+        tag: `acct-${requestId}`,
+        gameTitle: gameTitle,
+        alertKind: 'coins'
+      }, distId);
 
       return NextResponse.json({
         success: true,
