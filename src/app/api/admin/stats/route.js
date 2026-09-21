@@ -5,11 +5,34 @@ import { applyStaffGameFilter } from '../../../../lib/staffGameAccess';
 import { typeBExclusionFilter } from '../../../../lib/typeBDistributors';
 import { jsonOk } from '../../../../lib/apiResponse';
 
+// Nepal Standard Time is UTC+5:45 (offset = 345 minutes = 20700 seconds)
+const NEPAL_OFFSET_MS = 5 * 60 * 60 * 1000 + 45 * 60 * 1000; // 345 minutes in ms
+const RESET_HOUR_NEPAL = 5; // Resets daily at 5:00 AM Nepal Time
+const RESET_OFFSET_MS = RESET_HOUR_NEPAL * 60 * 60 * 1000; // 5 hours in ms
+
+/**
+ * Returns the UTC instant that corresponds to 5:00 AM
+ * of the current business day in Nepal Standard Time.
+ */
+function getNepalStartOfToday() {
+  const nowUtc = Date.now();
+  // Convert to Nepal local time
+  const nowNepal = nowUtc + NEPAL_OFFSET_MS;
+  // Shift back by 5 hours so that 5:00 AM becomes 00:00 of the cycle
+  const shifted = nowNepal - RESET_OFFSET_MS;
+  const dayStartShifted = shifted - (shifted % (24 * 60 * 60 * 1000));
+  const dayStartNepal = dayStartShifted + RESET_OFFSET_MS;
+  // Convert back to UTC
+  return new Date(dayStartNepal - NEPAL_OFFSET_MS);
+}
+
 async function aggregateFinancialTotals(db, baseQuery) {
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const startOfYesterday = new Date(startOfToday);
-  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+  const startOfToday = getNepalStartOfToday();
+  const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
+  const endOfToday = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000);
+
+  const startOfYesterdayIso = startOfYesterday.toISOString();
+  const endOfTodayIso = endOfToday.toISOString();
 
   const rows = await db.collection('transactions').aggregate([
     {
@@ -17,21 +40,60 @@ async function aggregateFinancialTotals(db, baseQuery) {
         ...baseQuery,
         status: 'SUCCESS',
         type: { $in: ['DEPOSIT', 'WITHDRAW'] },
-        isDepositFromCashout: { $ne: true }
+        isDepositFromCashout: { $ne: true },
+        $or: [
+          { createdAt: { $gte: startOfYesterdayIso, $lt: endOfTodayIso } },
+          { createdAt: { $gte: startOfYesterday, $lt: endOfToday } },
+          { date: { $gte: startOfYesterdayIso, $lt: endOfTodayIso } },
+          { date: { $gte: startOfYesterday, $lt: endOfToday } }
+        ]
       }
     },
     {
       $addFields: {
         txDate: {
           $cond: [
-            { $eq: [{ $type: '$date' }, 'date'] },
-            '$date',
-            { $toDate: '$date' }
+            { $eq: [{ $type: '$createdAt' }, 'date'] },
+            '$createdAt',
+            {
+              $convert: {
+                input: '$createdAt',
+                to: 'date',
+                onError: {
+                  $cond: [
+                    { $eq: [{ $type: '$date' }, 'date'] },
+                    '$date',
+                    {
+                      $convert: {
+                        input: '$date',
+                        to: 'date',
+                        onError: null,
+                        onNull: null
+                      }
+                    }
+                  ]
+                },
+                onNull: {
+                  $cond: [
+                    { $eq: [{ $type: '$date' }, 'date'] },
+                    '$date',
+                    {
+                      $convert: {
+                        input: '$date',
+                        to: 'date',
+                        onError: null,
+                        onNull: null
+                      }
+                    }
+                  ]
+                }
+              }
+            }
           ]
         }
       }
     },
-    { $match: { txDate: { $gte: startOfYesterday } } },
+    { $match: { txDate: { $gte: startOfYesterday, $lt: endOfToday } } },
     {
       $group: {
         _id: {

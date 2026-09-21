@@ -2,60 +2,26 @@ import { NextResponse } from 'next/server';
 import { getDb } from '../../../../../lib/mongodb';
 import { calcCommissionFromProfit, calcNetProfit } from '../../../../../lib/commission';
 
-function isSameCalendarDay(raw, targetYear, targetMonth, targetDay, dateParam) {
-  if (!raw) return false;
+// Nepal Standard Time offset: UTC+5:45 (345 minutes)
+const NEPAL_OFFSET_MS = 5 * 60 * 60 * 1000 + 45 * 60 * 1000;
+const RESET_HOUR_MS = 5 * 60 * 60 * 1000; // Resets daily at 5:00 AM Nepal Time
 
-  if (raw instanceof Date) {
-    if (isNaN(raw.getTime())) return false;
-    if (raw.getUTCFullYear() === targetYear && (raw.getUTCMonth() + 1) === targetMonth && raw.getUTCDate() === targetDay) return true;
-    if (raw.getFullYear() === targetYear && (raw.getMonth() + 1) === targetMonth && raw.getDate() === targetDay) return true;
-    const pkt = new Date(raw.getTime() + 5 * 3600000);
-    if (pkt.getUTCFullYear() === targetYear && (pkt.getUTCMonth() + 1) === targetMonth && pkt.getUTCDate() === targetDay) return true;
-    return false;
-  }
-
-  const str = String(raw).trim();
-  if (!str) return false;
-
-  if (str.startsWith(dateParam)) return true;
-
-  const y = String(targetYear);
-  const m = String(targetMonth);
-  const mPad = String(targetMonth).padStart(2, '0');
-  const d = String(targetDay);
-  const dPad = String(targetDay).padStart(2, '0');
-
-  const prefixes = [
-    `${m}/${d}/${y}`,
-    `${mPad}/${dPad}/${y}`,
-    `${m}/${dPad}/${y}`,
-    `${mPad}/${d}/${y}`,
-    `${y}-${mPad}-${dPad}`,
-    `${y}-${m}-${d}`,
-    `${y}/${mPad}/${dPad}`,
-    `${y}/${m}/${d}`
-  ];
-
-  for (const prefix of prefixes) {
-    if (str.startsWith(prefix)) return true;
-  }
-
-  const parsed = new Date(str);
-  if (!isNaN(parsed.getTime())) {
-    if (parsed.getUTCFullYear() === targetYear && (parsed.getUTCMonth() + 1) === targetMonth && parsed.getUTCDate() === targetDay) return true;
-    if (parsed.getFullYear() === targetYear && (parsed.getMonth() + 1) === targetMonth && parsed.getDate() === targetDay) return true;
-    const pkt = new Date(parsed.getTime() + 5 * 3600000);
-    if (pkt.getUTCFullYear() === targetYear && (pkt.getUTCMonth() + 1) === targetMonth && pkt.getUTCDate() === targetDay) return true;
-  }
-
-  return false;
+/**
+ * Convert a Nepal business date (YYYY-MM-DD) to exact UTC start/end boundaries.
+ * Day cycle runs from 05:00:00 AM Nepal time to 05:00:00 AM next day.
+ */
+function getNepalDayUtcRange(year, month, day) {
+  const midnightUtc = Date.UTC(year, month - 1, day) - NEPAL_OFFSET_MS;
+  const startUtc = new Date(midnightUtc + RESET_HOUR_MS);
+  const endUtc = new Date(midnightUtc + RESET_HOUR_MS + 24 * 60 * 60 * 1000);
+  return { startUtc, endUtc };
 }
 
 export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
     const distributorId = searchParams.get('distributorId');
-    const dateParam = searchParams.get('date');
+    const dateParam = String(searchParams.get('date') || '').trim();
 
     if (!distributorId || !dateParam) {
       return NextResponse.json({ success: false, message: 'Missing distributorId or date.' }, { status: 400 });
@@ -63,9 +29,14 @@ export async function GET(req) {
 
     const parts = dateParam.split('-').map(Number);
     if (parts.length !== 3 || parts.some(isNaN)) {
-      return NextResponse.json({ success: false, message: 'Invalid date format.' }, { status: 400 });
+      return NextResponse.json({ success: false, message: 'Invalid date format. Use YYYY-MM-DD.' }, { status: 400 });
     }
     const [targetYear, targetMonth, targetDay] = parts;
+
+    // Compute the UTC window that equals this Nepal calendar day
+    const { startUtc, endUtc } = getNepalDayUtcRange(targetYear, targetMonth, targetDay);
+    const startIso = startUtc.toISOString();
+    const endIso = endUtc.toISOString();
 
     const db = await getDb();
     const distributorsCollection = db.collection('distributors');
@@ -91,31 +62,44 @@ export async function GET(req) {
     let totalWithdrawals = 0;
 
     if (playerEmails.length > 0) {
-      const txs = await transactionsCollection.find(
+      const datePrefixRegex = new RegExp(`^0?${targetMonth}/0?${targetDay}/${targetYear}`);
+
+      const rows = await transactionsCollection.aggregate([
         {
-          userEmail: { $in: playerEmails },
-          status: 'SUCCESS',
-          type: { $in: ['DEPOSIT', 'WITHDRAW'] },
-          isDepositFromCashout: { $ne: true }
+          $match: {
+            userEmail: { $in: playerEmails },
+            status: 'SUCCESS',
+            type: { $in: ['DEPOSIT', 'WITHDRAW'] },
+            isDepositFromCashout: { $ne: true },
+            $or: [
+              { createdAt: { $gte: startIso, $lt: endIso } },
+              { createdAt: { $gte: startUtc, $lt: endUtc } },
+              { date: { $gte: startIso, $lt: endIso } },
+              { date: { $gte: startUtc, $lt: endUtc } },
+              { date: { $regex: datePrefixRegex } }
+            ]
+          }
         },
-        { projection: { amount: 1, payoutSent: 1, type: 1, date: 1, createdAt: 1, isDepositFromCashout: 1 } }
-      ).toArray();
-
-      txs.forEach(tx => {
-        const isMatch = isSameCalendarDay(tx.date, targetYear, targetMonth, targetDay, dateParam) ||
-                        isSameCalendarDay(tx.createdAt, targetYear, targetMonth, targetDay, dateParam);
-        if (!isMatch) return;
-
-        const amt = parseFloat(tx.amount || 0);
-        if (tx.type === 'DEPOSIT') {
-          totalDeposits += amt;
-        } else if (tx.type === 'WITHDRAW') {
-          const val = (tx.payoutSent !== undefined && tx.payoutSent !== null && tx.payoutSent !== '') 
-            ? parseFloat(tx.payoutSent) 
-            : amt;
-          totalWithdrawals += val;
+        {
+          $group: {
+            _id: '$type',
+            total: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$type', 'WITHDRAW'] },
+                  { $toDouble: { $ifNull: ['$payoutSent', { $ifNull: ['$amount', 0] }] } },
+                  { $toDouble: { $ifNull: ['$amount', 0] } }
+                ]
+              }
+            }
+          }
         }
-      });
+      ]).toArray();
+
+      for (const row of rows) {
+        if (row._id === 'DEPOSIT') totalDeposits = row.total || 0;
+        else if (row._id === 'WITHDRAW') totalWithdrawals = row.total || 0;
+      }
     }
 
     const netProfit = calcNetProfit(totalDeposits, totalWithdrawals);

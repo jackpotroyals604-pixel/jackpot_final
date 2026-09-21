@@ -36,9 +36,13 @@ export async function GET(req) {
 
     const enrichedPlayers = [];
 
-    // Get today's start date
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    // Get today's start date in Nepal Standard Time (UTC+5:45, resets at 5:00 AM)
+    const NEPAL_OFFSET_MS = 5 * 60 * 60 * 1000 + 45 * 60 * 1000;
+    const RESET_OFFSET_MS = 5 * 60 * 60 * 1000;
+    const nowNepal = Date.now() + NEPAL_OFFSET_MS;
+    const shifted = nowNepal - RESET_OFFSET_MS;
+    const dayStartShifted = shifted - (shifted % (24 * 60 * 60 * 1000));
+    const todayStart = new Date(dayStartShifted + RESET_OFFSET_MS - NEPAL_OFFSET_MS);
 
     if (playerEmails.length > 0) {
       // Get all deposits for these players
@@ -56,15 +60,31 @@ export async function GET(req) {
         type: 'WITHDRAW',
         status: 'SUCCESS'
       }).toArray();
-      totalWithdrawals = withdrawDocs.reduce((acc, curr) => acc + parseFloat(curr.amount || 0), 0);
+      totalWithdrawals = withdrawDocs.reduce((acc, curr) => {
+        const val = (curr.payoutSent !== undefined && curr.payoutSent !== null && curr.payoutSent !== '')
+          ? parseFloat(curr.payoutSent)
+          : parseFloat(curr.amount || 0);
+        return acc + val;
+      }, 0);
 
-      // Today's deposits
-      const todayDepositDocs = depositDocs.filter(d => new Date(d.date) >= todayStart);
+      // Today's deposits (Nepal timezone midnight)
+      const todayDepositDocs = depositDocs.filter(d => {
+        const time = d.createdAt || d.date;
+        return time && new Date(time) >= todayStart;
+      });
       todayDeposits = todayDepositDocs.reduce((acc, curr) => acc + parseFloat(curr.amount || 0), 0);
 
-      // Today's withdrawals
-      const todayWithdrawDocs = withdrawDocs.filter(w => new Date(w.date) >= todayStart);
-      todayWithdrawals = todayWithdrawDocs.reduce((acc, curr) => acc + parseFloat(curr.amount || 0), 0);
+      // Today's withdrawals (Nepal timezone midnight)
+      const todayWithdrawDocs = withdrawDocs.filter(w => {
+        const time = w.createdAt || w.date;
+        return time && new Date(time) >= todayStart;
+      });
+      todayWithdrawals = todayWithdrawDocs.reduce((acc, curr) => {
+        const val = (curr.payoutSent !== undefined && curr.payoutSent !== null && curr.payoutSent !== '')
+          ? parseFloat(curr.payoutSent)
+          : parseFloat(curr.amount || 0);
+        return acc + val;
+      }, 0);
 
       // Pending withdrawals of referred players
       const pendingWithdrawDocs = await transactionsCollection.find({

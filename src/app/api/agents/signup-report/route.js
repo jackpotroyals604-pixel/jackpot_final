@@ -55,21 +55,28 @@ export async function GET(req) {
 
     // 2. Filter players by date range if provided
     let filteredPlayers = [...players];
+    const NEPAL_OFFSET_MS = 5 * 60 * 60 * 1000 + 45 * 60 * 1000;
     if (fromDate) {
-      const start = new Date(fromDate);
-      start.setHours(0, 0, 0, 0);
-      filteredPlayers = filteredPlayers.filter(p => {
-        const time = p.createdAt || p.date;
-        return time && new Date(time) >= start;
-      });
+      const parts = fromDate.split('-').map(Number);
+      if (parts.length === 3 && !parts.some(isNaN)) {
+        const [y, m, d] = parts;
+        const start = new Date(Date.UTC(y, m - 1, d) - NEPAL_OFFSET_MS);
+        filteredPlayers = filteredPlayers.filter(p => {
+          const time = p.createdAt || p.date;
+          return time && new Date(time) >= start;
+        });
+      }
     }
     if (toDate) {
-      const end = new Date(toDate);
-      end.setHours(23, 59, 59, 999);
-      filteredPlayers = filteredPlayers.filter(p => {
-        const time = p.createdAt || p.date;
-        return time && new Date(time) <= end;
-      });
+      const parts = toDate.split('-').map(Number);
+      if (parts.length === 3 && !parts.some(isNaN)) {
+        const [y, m, d] = parts;
+        const end = new Date(Date.UTC(y, m - 1, d + 1) - NEPAL_OFFSET_MS - 1);
+        filteredPlayers = filteredPlayers.filter(p => {
+          const time = p.createdAt || p.date;
+          return time && new Date(time) <= end;
+        });
+      }
     }
 
     // 3. Compute Card Stats

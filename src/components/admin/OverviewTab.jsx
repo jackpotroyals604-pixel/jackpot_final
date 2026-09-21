@@ -98,29 +98,20 @@ export default function OverviewTab({ adminUser, onUpdateGameCoinsPool }) {
   const [isUpdatingPool, setIsUpdatingPool] = React.useState(false);
   const [resetUsedCoins, setResetUsedCoins] = React.useState(false);
 
-  const getYesterdayDateString = () => {
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const year = yesterday.getFullYear();
-    const month = String(yesterday.getMonth() + 1).padStart(2, '0');
-    const day = String(yesterday.getDate()).padStart(2, '0');
+  const getNepalDateString = (offsetDays = 0) => {
+    // Nepal Standard Time is UTC+5:45 (345 minutes), reset cycle at 5:00 AM
+    const NEPAL_OFFSET_MS = (5 * 60 + 45) * 60 * 1000;
+    const RESET_OFFSET_MS = 5 * 60 * 60 * 1000; // 5:00 AM reset
+    const target = new Date(Date.now() + NEPAL_OFFSET_MS - RESET_OFFSET_MS + offsetDays * 24 * 60 * 60 * 1000);
+    const year = target.getUTCFullYear();
+    const month = String(target.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(target.getUTCDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
 
-  const getTodayDateString = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const getOneYearAgoDateString = () => {
-    const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
-    const year = oneYearAgo.getFullYear();
-    const month = String(oneYearAgo.getMonth() + 1).padStart(2, '0');
-    const day = String(oneYearAgo.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
+  const getYesterdayDateString = () => getNepalDateString(-1);
+  const getTodayDateString = () => getNepalDateString(0);
+  const getOneYearAgoDateString = () => getNepalDateString(-365);
 
   const [lookupDate, setLookupDate] = React.useState(getYesterdayDateString());
   const [lookupStats, setLookupStats] = React.useState({ totalIn: 0, totalOut: 0 });
@@ -129,7 +120,12 @@ export default function OverviewTab({ adminUser, onUpdateGameCoinsPool }) {
   React.useEffect(() => {
     if (!lookupDate) return;
     setLookupLoading(true);
-    fetch(`/api/admin/stats/by-date?date=${lookupDate}`)
+    const q = new URLSearchParams({
+      date: lookupDate,
+      adminRole: adminUser?.role || '',
+      adminDistributorId: adminUser?.distributorId || ''
+    });
+    fetch(`/api/admin/stats/by-date?${q.toString()}`)
       .then(res => res.json())
       .then(data => {
         if (data.success) {
@@ -138,7 +134,7 @@ export default function OverviewTab({ adminUser, onUpdateGameCoinsPool }) {
       })
       .catch(err => console.error('Failed to load stats for date:', err))
       .finally(() => setLookupLoading(false));
-  }, [lookupDate]);
+  }, [lookupDate, adminUser?.distributorId, adminUser?.role]);
 
   const triggerPoolUpdate = (game) => {
     setSelectedGame(game);

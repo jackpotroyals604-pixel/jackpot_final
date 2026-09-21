@@ -412,10 +412,12 @@ export default function DistributorPortal() {
   const [resetPoolUsedCoins, setResetPoolUsedCoins] = useState(false);
 
   const getTodayDateString = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
+    const NEPAL_OFFSET_MS = (5 * 60 + 45) * 60 * 1000;
+    const RESET_OFFSET_MS = 5 * 60 * 60 * 1000; // 5:00 AM reset
+    const target = new Date(Date.now() + NEPAL_OFFSET_MS - RESET_OFFSET_MS);
+    const year = target.getUTCFullYear();
+    const month = String(target.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(target.getUTCDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
 
