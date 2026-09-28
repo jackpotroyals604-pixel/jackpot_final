@@ -19,7 +19,13 @@ const DEFAULT_SETTINGS = {
   firstDepositBonus: 300,
   signupFreeplay: 3,
   minimumDepositLimit: 5,
-  minimumWithdrawalLimit: 5,
+  minimumWithdrawalLimit: 25,
+  freeplayMinWithdraw: 30,
+  defaultMinWithdraw: 25,
+  withdrawTier1MinDeposit: 5,
+  withdrawTier1MaxDeposit: 50,
+  withdrawTier1Multiplier: 5,
+  withdrawTier2Multiplier: 3,
   // Withdrawal form proof requirements (Super Admin toggles)
   withdrawRequireGameScreenshot: false,
   withdrawRequireTagQrScreenshot: true,
@@ -190,8 +196,25 @@ export async function PUT(req) {
       { upsert: true }
     );
 
-    // Invalidate cache
+    // Sync cashout settings to global_settings as well
+    const cashoutSync = {};
+    ['freeplayMinWithdraw', 'defaultMinWithdraw', 'withdrawTier1MinDeposit', 'withdrawTier1MaxDeposit', 'withdrawTier1Multiplier', 'withdrawTier2Multiplier'].forEach((key) => {
+      if (updateFields[key] !== undefined) cashoutSync[key] = updateFields[key];
+    });
+    if (updateFields.minimumWithdrawalLimit !== undefined && updateFields.defaultMinWithdraw === undefined) {
+      cashoutSync.defaultMinWithdraw = updateFields.minimumWithdrawalLimit;
+    }
+    if (Object.keys(cashoutSync).length > 0) {
+      await settingsCollection.updateOne(
+        { id: 'global_settings' },
+        { $set: cashoutSync },
+        { upsert: true }
+      );
+    }
+
+    // Invalidate caches
     cache.del('frontend_settings_all');
+    cache.del('settings_all');
 
     return NextResponse.json({ success: true, message: 'Frontend settings updated successfully!' });
   } catch (err) {

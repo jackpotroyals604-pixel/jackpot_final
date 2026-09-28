@@ -17,7 +17,31 @@ export async function GET() {
     
     // Seed defaults if missing
     if (!settings) {
-      settings = { id: 'global_settings', firstDepositBonus: 300, regularDepositBonus: 20, referralBonus: 10, preventDuplicateDeviceAccounts: true, usdtAddress: '', usdtQrCode: '', affiliatePayoutNetwork: 'TRC20', affiliatePayoutWallet: '', affiliatePayoutQrCode: '', affiliatePayoutWalletBEP20: '', affiliatePayoutQrBEP20: '', affiliatePlatformCommissionRate: 90, adPaymentNetwork: 'BEP20', adPaymentWallet: '', adPaymentQrCode: '', adBudgetLimit: 6000 };
+      settings = {
+        id: 'global_settings',
+        firstDepositBonus: 300,
+        regularDepositBonus: 20,
+        referralBonus: 10,
+        preventDuplicateDeviceAccounts: true,
+        freeplayMinWithdraw: 30,
+        defaultMinWithdraw: 25,
+        withdrawTier1MinDeposit: 5,
+        withdrawTier1MaxDeposit: 50,
+        withdrawTier1Multiplier: 5,
+        withdrawTier2Multiplier: 3,
+        usdtAddress: '',
+        usdtQrCode: '',
+        affiliatePayoutNetwork: 'TRC20',
+        affiliatePayoutWallet: '',
+        affiliatePayoutQrCode: '',
+        affiliatePayoutWalletBEP20: '',
+        affiliatePayoutQrBEP20: '',
+        affiliatePlatformCommissionRate: 90,
+        adPaymentNetwork: 'BEP20',
+        adPaymentWallet: '',
+        adPaymentQrCode: '',
+        adBudgetLimit: 6000
+      };
       await settingsCollection.insertOne(settings);
     } else {
       let needsUpdate = false;
@@ -30,6 +54,36 @@ export async function GET() {
       if (settings.referralBonus === undefined) {
         updates.referralBonus = 10;
         settings.referralBonus = 10;
+        needsUpdate = true;
+      }
+      if (settings.freeplayMinWithdraw === undefined) {
+        updates.freeplayMinWithdraw = 30;
+        settings.freeplayMinWithdraw = 30;
+        needsUpdate = true;
+      }
+      if (settings.defaultMinWithdraw === undefined) {
+        updates.defaultMinWithdraw = 25;
+        settings.defaultMinWithdraw = 25;
+        needsUpdate = true;
+      }
+      if (settings.withdrawTier1MinDeposit === undefined) {
+        updates.withdrawTier1MinDeposit = 5;
+        settings.withdrawTier1MinDeposit = 5;
+        needsUpdate = true;
+      }
+      if (settings.withdrawTier1MaxDeposit === undefined) {
+        updates.withdrawTier1MaxDeposit = 50;
+        settings.withdrawTier1MaxDeposit = 50;
+        needsUpdate = true;
+      }
+      if (settings.withdrawTier1Multiplier === undefined) {
+        updates.withdrawTier1Multiplier = 5;
+        settings.withdrawTier1Multiplier = 5;
+        needsUpdate = true;
+      }
+      if (settings.withdrawTier2Multiplier === undefined) {
+        updates.withdrawTier2Multiplier = 3;
+        settings.withdrawTier2Multiplier = 3;
         needsUpdate = true;
       }
       if (settings.usdtAddress === undefined) {
@@ -90,7 +144,30 @@ export async function GET() {
 // PUT / POST update settings (Super Admin only)
 export async function PUT(req) {
   try {
-    const { firstDepositBonus, regularDepositBonus, referralBonus, preventDuplicateDeviceAccounts, usdtAddress, usdtQrCode, affiliatePayoutNetwork, affiliatePayoutWallet, affiliatePayoutQrCode, affiliatePayoutWalletBEP20, affiliatePayoutQrBEP20, affiliatePlatformCommissionRate, adPaymentNetwork, adPaymentWallet, adPaymentQrCode, adBudgetLimit } = await req.json();
+    const {
+      firstDepositBonus,
+      regularDepositBonus,
+      referralBonus,
+      preventDuplicateDeviceAccounts,
+      freeplayMinWithdraw,
+      defaultMinWithdraw,
+      withdrawTier1MinDeposit,
+      withdrawTier1MaxDeposit,
+      withdrawTier1Multiplier,
+      withdrawTier2Multiplier,
+      usdtAddress,
+      usdtQrCode,
+      affiliatePayoutNetwork,
+      affiliatePayoutWallet,
+      affiliatePayoutQrCode,
+      affiliatePayoutWalletBEP20,
+      affiliatePayoutQrBEP20,
+      affiliatePlatformCommissionRate,
+      adPaymentNetwork,
+      adPaymentWallet,
+      adPaymentQrCode,
+      adBudgetLimit
+    } = await req.json();
 
     const db = await getDb();
     const settingsCollection = db.collection('settings');
@@ -107,6 +184,24 @@ export async function PUT(req) {
     }
     if (preventDuplicateDeviceAccounts !== undefined) {
       updateFields.preventDuplicateDeviceAccounts = Boolean(preventDuplicateDeviceAccounts);
+    }
+    if (freeplayMinWithdraw !== undefined) {
+      updateFields.freeplayMinWithdraw = Math.max(1, Number(freeplayMinWithdraw) || 30);
+    }
+    if (defaultMinWithdraw !== undefined) {
+      updateFields.defaultMinWithdraw = Math.max(1, Number(defaultMinWithdraw) || 25);
+    }
+    if (withdrawTier1MinDeposit !== undefined) {
+      updateFields.withdrawTier1MinDeposit = Math.max(1, Number(withdrawTier1MinDeposit) || 5);
+    }
+    if (withdrawTier1MaxDeposit !== undefined) {
+      updateFields.withdrawTier1MaxDeposit = Math.max(1, Number(withdrawTier1MaxDeposit) || 50);
+    }
+    if (withdrawTier1Multiplier !== undefined) {
+      updateFields.withdrawTier1Multiplier = Math.max(0.1, Number(withdrawTier1Multiplier) || 5);
+    }
+    if (withdrawTier2Multiplier !== undefined) {
+      updateFields.withdrawTier2Multiplier = Math.max(0.1, Number(withdrawTier2Multiplier) || 3);
     }
     if (usdtAddress !== undefined) {
       updateFields.usdtAddress = String(usdtAddress).trim();
@@ -151,11 +246,28 @@ export async function PUT(req) {
       { upsert: true }
     );
 
+    // Sync cashout settings to frontend_settings as well
+    const cashoutSync = {};
+    ['freeplayMinWithdraw', 'defaultMinWithdraw', 'withdrawTier1MinDeposit', 'withdrawTier1MaxDeposit', 'withdrawTier1Multiplier', 'withdrawTier2Multiplier'].forEach((key) => {
+      if (updateFields[key] !== undefined) cashoutSync[key] = updateFields[key];
+    });
+    if (updateFields.defaultMinWithdraw !== undefined) {
+      cashoutSync.minimumWithdrawalLimit = updateFields.defaultMinWithdraw;
+    }
+    if (Object.keys(cashoutSync).length > 0) {
+      await settingsCollection.updateOne(
+        { id: 'frontend_settings' },
+        { $set: cashoutSync },
+        { upsert: true }
+      );
+    }
+
     // Invalidate caches
     cache.del('settings_all');
-    cache.del('admin_stats'); // Settings can affect statistics/allotments
+    cache.del('frontend_settings_all');
+    cache.del('admin_stats');
 
-    return NextResponse.json({ success: true, message: 'Bonus settings updated successfully!' });
+    return NextResponse.json({ success: true, message: 'Settings updated successfully!' });
   } catch (err) {
     console.error('Update Settings API Error:', err);
     return NextResponse.json({ success: false, message: 'Server error: ' + err.message }, { status: 500 });

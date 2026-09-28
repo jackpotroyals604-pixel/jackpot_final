@@ -27,7 +27,12 @@ export default function FrontendSettingsTab({ adminUser }) {
   const [firstDepositBonus, setFirstDepositBonus] = useState(300);
   const [signupFreeplay, setSignupFreeplay] = useState(3);
   const [minimumDepositLimit, setMinimumDepositLimit] = useState(5);
-  const [minimumWithdrawalLimit, setMinimumWithdrawalLimit] = useState(5);
+  const [minimumWithdrawalLimit, setMinimumWithdrawalLimit] = useState(25);
+  const [freeplayMinWithdraw, setFreeplayMinWithdraw] = useState(30);
+  const [withdrawTier1Multiplier, setWithdrawTier1Multiplier] = useState(5);
+  const [withdrawTier2Multiplier, setWithdrawTier2Multiplier] = useState(3);
+  const [withdrawTier1MinDeposit, setWithdrawTier1MinDeposit] = useState(5);
+  const [withdrawTier1MaxDeposit, setWithdrawTier1MaxDeposit] = useState(50);
   const [withdrawRequireGameScreenshot, setWithdrawRequireGameScreenshot] = useState(false);
   const [withdrawRequireTagQrScreenshot, setWithdrawRequireTagQrScreenshot] = useState(true);
 
@@ -120,7 +125,12 @@ export default function FrontendSettingsTab({ adminUser }) {
       setFirstDepositBonus(s.firstDepositBonus !== undefined ? s.firstDepositBonus : 300);
       setSignupFreeplay(s.signupFreeplay !== undefined ? s.signupFreeplay : 3);
       setMinimumDepositLimit(s.minimumDepositLimit !== undefined ? s.minimumDepositLimit : 5);
-      setMinimumWithdrawalLimit(s.minimumWithdrawalLimit !== undefined ? s.minimumWithdrawalLimit : 5);
+      setMinimumWithdrawalLimit(s.minimumWithdrawalLimit !== undefined ? s.minimumWithdrawalLimit : (s.defaultMinWithdraw !== undefined ? s.defaultMinWithdraw : 25));
+      setFreeplayMinWithdraw(s.freeplayMinWithdraw !== undefined ? s.freeplayMinWithdraw : 30);
+      setWithdrawTier1Multiplier(s.withdrawTier1Multiplier !== undefined ? s.withdrawTier1Multiplier : 5);
+      setWithdrawTier2Multiplier(s.withdrawTier2Multiplier !== undefined ? s.withdrawTier2Multiplier : 3);
+      setWithdrawTier1MinDeposit(s.withdrawTier1MinDeposit !== undefined ? s.withdrawTier1MinDeposit : 5);
+      setWithdrawTier1MaxDeposit(s.withdrawTier1MaxDeposit !== undefined ? s.withdrawTier1MaxDeposit : 50);
       setWithdrawRequireGameScreenshot(s.withdrawRequireGameScreenshot === true);
       setWithdrawRequireTagQrScreenshot(s.withdrawRequireTagQrScreenshot !== false);
 
@@ -266,6 +276,12 @@ export default function FrontendSettingsTab({ adminUser }) {
           signupFreeplay: Number(signupFreeplay),
           minimumDepositLimit: Number(minimumDepositLimit),
           minimumWithdrawalLimit: Number(minimumWithdrawalLimit),
+          defaultMinWithdraw: Number(minimumWithdrawalLimit),
+          freeplayMinWithdraw: Number(freeplayMinWithdraw),
+          withdrawTier1Multiplier: Number(withdrawTier1Multiplier),
+          withdrawTier2Multiplier: Number(withdrawTier2Multiplier),
+          withdrawTier1MinDeposit: Number(withdrawTier1MinDeposit),
+          withdrawTier1MaxDeposit: Number(withdrawTier1MaxDeposit),
           withdrawRequireGameScreenshot,
           withdrawRequireTagQrScreenshot,
 
@@ -1144,14 +1160,60 @@ export default function FrontendSettingsTab({ adminUser }) {
               </div>
 
               <div className="input-group" style={{ flex: '1 1 200px', margin: 0 }}>
-                <label>Minimum Cashout Limit ($)</label>
+                <label>Default Min Cashout ($)</label>
                 <div className="input-wrapper" style={{ background: '#07090f' }}>
                   <i className="fa-solid fa-wallet input-icon"></i>
                   <input
                     type="number"
-                    placeholder="5"
+                    placeholder="25"
                     value={minimumWithdrawalLimit}
                     onChange={(e) => setMinimumWithdrawalLimit(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="input-group" style={{ flex: '1 1 200px', margin: 0 }}>
+                <label>Freeplay Min Cashout ($)</label>
+                <div className="input-wrapper" style={{ background: '#07090f' }}>
+                  <i className="fa-solid fa-gift input-icon" style={{ color: '#00ff66' }}></i>
+                  <input
+                    type="number"
+                    placeholder="30"
+                    value={freeplayMinWithdraw}
+                    onChange={(e) => setFreeplayMinWithdraw(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label style={{ fontSize: '0.75rem' }}>Tier 1 Multiplier ($5-$50 Deposit)</label>
+                <div className="input-wrapper" style={{ background: '#07090f' }}>
+                  <i className="fa-solid fa-xmark input-icon" style={{ color: '#f59e0b' }}></i>
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="5"
+                    value={withdrawTier1Multiplier}
+                    onChange={(e) => setWithdrawTier1Multiplier(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="input-group" style={{ margin: 0 }}>
+                <label style={{ fontSize: '0.75rem' }}>Tier 2 Multiplier (&gt;$50 Deposit)</label>
+                <div className="input-wrapper" style={{ background: '#07090f' }}>
+                  <i className="fa-solid fa-xmark input-icon" style={{ color: '#38bdf8' }}></i>
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="3"
+                    value={withdrawTier2Multiplier}
+                    onChange={(e) => setWithdrawTier2Multiplier(e.target.value)}
                     required
                   />
                 </div>

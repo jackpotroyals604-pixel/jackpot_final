@@ -230,35 +230,25 @@ export default function AdminPage({ portalName, forcedRole }) {
     }
   };
 
-  const handleUpdateSettings = async (firstDepositBonus, regularDepositBonus, referralBonus, usdtAddress, usdtQrCode, affiliatePayoutNetwork, affiliatePayoutWallet, affiliatePayoutQrCode, affiliatePlatformCommissionRate) => {
+  const handleUpdateSettings = async (settingsPayload) => {
     try {
-      const response = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firstDepositBonus,
-          regularDepositBonus,
-          referralBonus,
-          usdtAddress,
-          usdtQrCode,
-          affiliatePayoutNetwork,
-          affiliatePayoutWallet,
-          affiliatePayoutQrCode,
-          affiliatePlatformCommissionRate
-        })
-      });
-      const data = await response.json();
-      if (data.success) {
-        showToast('System settings updated successfully!', 'success');
-        
-        // Mutate SWR settings cache
-        mutate('/api/settings');
-      } else {
-        showToast(data.message || 'Failed to update settings.', 'error');
+      if (settingsPayload && typeof settingsPayload === 'object' && Object.keys(settingsPayload).length > 0) {
+        const response = await fetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(settingsPayload)
+        });
+        const data = await response.json();
+        if (data.success) {
+          showToast('System settings updated successfully!', 'success');
+        } else {
+          showToast(data.message || 'Failed to update settings.', 'error');
+        }
       }
+      mutate('/api/settings');
+      mutate('/api/settings/frontend');
     } catch (err) {
-      console.error('Update settings API error:', err);
-      showToast('Connection error updating settings.', 'error');
+      console.error('Update settings error:', err);
     }
   };
 

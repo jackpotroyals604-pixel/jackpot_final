@@ -9,7 +9,7 @@ import { publishAdminEvent } from '../../../lib/adminEvents';
 import { accountLookupKey, buildGameUsernameMap } from '../../../lib/resolveGameUsername';
 import { compressDataUrlIfNeeded } from '../../../lib/serverImageCompress';
 import { applyStaffGameFilter } from '../../../lib/staffGameAccess';
-import { getDepositBasedMinWithdraw } from '../../../lib/withdrawRules';
+import { getDepositBasedMinWithdraw, getDepositWithdrawRule } from '../../../lib/withdrawRules';
 import { generateUniqueDepositCode } from '../../../lib/depositCodeGenerator';
 
 // GET transactions (supports filtering by email for users, or returning all for admins)
@@ -1022,6 +1022,14 @@ export async function POST(req) {
       if (!frontendSettings) {
         frontendSettings = await db.collection('settings').findOne({ id: 'frontend_settings' }) || {};
       }
+      let globalSettings = cache.get('settings_all');
+      if (!globalSettings) {
+        globalSettings = await db.collection('settings').findOne({ id: 'global_settings' }) || {};
+      }
+      const activeWithdrawSettings = { ...globalSettings, ...frontendSettings };
+      const freeplayMin = Number(activeWithdrawSettings.freeplayMinWithdraw || 30);
+      const defaultMin = Number(activeWithdrawSettings.defaultMinWithdraw || activeWithdrawSettings.minimumWithdrawalLimit || 25);
+
       const requireGameShot = frontendSettings.withdrawRequireGameScreenshot === true;
       const requireTagQr = frontendSettings.withdrawRequireTagQrScreenshot !== false;
 
@@ -1071,11 +1079,10 @@ export async function POST(req) {
         console.error('Error checking freeplay session state:', checkErr);
         txObject.isFreeplayWithdraw = false;
       }
-      // Keep full amount on the transaction — coins admin needs the real amount to deduct
-      // The amount will be capped to $30 when the coins admin approves (in coins-notifications PUT)
-      if (txObject.isFreeplayWithdraw && parseFloat(txObject.amount) < 100) {
+      // Freeplay cashout minimum check (default $30, or admin configured)
+      if (txObject.isFreeplayWithdraw && parseFloat(txObject.amount) < freeplayMin) {
         return NextResponse.json(
-          { success: false, message: 'Freeplay withdraw request must be at least $100.' },
+          { success: false, message: `Freeplay withdraw request must be at least $${freeplayMin.toFixed(2)}.` },
           { status: 400 }
         );
       }
@@ -1083,7 +1090,7 @@ export async function POST(req) {
       // Deposit-based cashout floor (skip remainder claims + freeplay withdraw)
       if (!txObject.isRemainderRequest && !txObject.isFreeplayWithdraw) {
         const gameTitle = txObject.gameTitle || '';
-        const lastDeposit = await transactionsCollection.findOne(
+        let lastDeposit = await transactionsCollection.findOne(
           {
             userEmail: txObject.userEmail,
             type: 'DEPOSIT',
@@ -1094,14 +1101,48 @@ export async function POST(req) {
           },
           { sort: { createdAt: -1, id: -1 } }
         );
-        const depositMin = getDepositBasedMinWithdraw(lastDeposit?.amount);
+        if (!lastDeposit && gameTitle) {
+          lastDeposit = await transactionsCollection.findOne(
+            {
+              userEmail: txObject.userEmail,
+              type: 'DEPOSIT',
+              status: 'SUCCESS'
+            },
+            { sort: { createdAt: -1, id: -1 } }
+          );
+        }
+
+        if (lastDeposit && (!lastDeposit.totalCoins || lastDeposit.totalCoins <= 0)) {
+          try {
+            const coinNoti = await db.collection('coinsNotifications').findOne({
+              transactionId: { $in: [lastDeposit.id, String(lastDeposit.id), Number(lastDeposit.id)].filter(Boolean) }
+            });
+            if (coinNoti?.totalCoins) {
+              lastDeposit.totalCoins = coinNoti.totalCoins;
+              if (coinNoti.bonusApplied !== undefined) lastDeposit.bonusApplied = coinNoti.bonusApplied;
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+
+        const rule = getDepositWithdrawRule(lastDeposit, activeWithdrawSettings);
+        const depositMin = rule ? rule.minWithdraw : null;
         const askAmount = parseFloat(txObject.amount);
+
         if (depositMin != null && Number.isFinite(askAmount) && askAmount < depositMin) {
-          const mult = Number(lastDeposit.amount) < 50 ? 5 : 3;
           return NextResponse.json(
             {
               success: false,
-              message: `Minimum cashout is $${depositMin.toFixed(2)} (last deposit $${parseFloat(lastDeposit.amount).toFixed(2)} × ${mult}).`
+              message: `Minimum cashout is $${depositMin.toFixed(2)} (${rule.allottedCoins} coins allotted × ${rule.multiplier}).`
+            },
+            { status: 400 }
+          );
+        } else if (Number.isFinite(askAmount) && askAmount < defaultMin) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: `Minimum cashout is $${defaultMin.toFixed(2)}.`
             },
             { status: 400 }
           );

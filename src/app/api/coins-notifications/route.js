@@ -560,10 +560,17 @@ export async function PUT(req) {
           if (parentTx.type === 'WITHDRAW') {
             txUpdate.status = 'PENDING';
             if (originalNoti.isFreeplayWithdraw) {
-              txUpdate.payoutAmount = 30;
-              txUpdate.amount = 30.0;
+              let fpCap = 30;
+              try {
+                const sDoc = (await db.collection('settings').findOne({ id: 'frontend_settings' })) || (await db.collection('settings').findOne({ id: 'global_settings' }));
+                if (sDoc?.freeplayMinWithdraw) fpCap = Number(sDoc.freeplayMinWithdraw);
+              } catch {
+                /* ignore */
+              }
+              txUpdate.payoutAmount = fpCap;
+              txUpdate.amount = fpCap;
               txUpdate.isFreeplayWithdraw = true;
-              txUpdate.note = 'Freeplay win capped at $30 max cashout.';
+              txUpdate.note = `Freeplay win capped at $${fpCap} max cashout.`;
             }
             let playerDisplayName = parentTx.userEmail;
             if (parentTx.userEmail) {

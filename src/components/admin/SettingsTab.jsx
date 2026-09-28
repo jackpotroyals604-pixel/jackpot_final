@@ -23,6 +23,14 @@ export default function SettingsTab({ onUpdateSettings }) {
   const [adPaymentQrCode, setAdPaymentQrCode] = useState('');
   const [adBudgetLimit, setAdBudgetLimit] = useState(6000);
 
+  // Cashout rules & deposit multiplier settings
+  const [freeplayMinWithdraw, setFreeplayMinWithdraw] = useState(30);
+  const [defaultMinWithdraw, setDefaultMinWithdraw] = useState(25);
+  const [withdrawTier1Multiplier, setWithdrawTier1Multiplier] = useState(5);
+  const [withdrawTier2Multiplier, setWithdrawTier2Multiplier] = useState(3);
+  const [withdrawTier1MinDeposit, setWithdrawTier1MinDeposit] = useState(5);
+  const [withdrawTier1MaxDeposit, setWithdrawTier1MaxDeposit] = useState(50);
+
   // Sync settings inputs when SWR loads data
   useEffect(() => {
     if (settingsData?.settings) {
@@ -30,6 +38,12 @@ export default function SettingsTab({ onUpdateSettings }) {
       setRegularBonusInput(settingsData.settings.regularDepositBonus);
       setReferralBonusInput(settingsData.settings.referralBonus || 10);
       setPreventDuplicateDeviceAccounts(settingsData.settings.preventDuplicateDeviceAccounts !== false);
+      setFreeplayMinWithdraw(settingsData.settings.freeplayMinWithdraw !== undefined ? settingsData.settings.freeplayMinWithdraw : 30);
+      setDefaultMinWithdraw(settingsData.settings.defaultMinWithdraw !== undefined ? settingsData.settings.defaultMinWithdraw : 25);
+      setWithdrawTier1Multiplier(settingsData.settings.withdrawTier1Multiplier !== undefined ? settingsData.settings.withdrawTier1Multiplier : 5);
+      setWithdrawTier2Multiplier(settingsData.settings.withdrawTier2Multiplier !== undefined ? settingsData.settings.withdrawTier2Multiplier : 3);
+      setWithdrawTier1MinDeposit(settingsData.settings.withdrawTier1MinDeposit !== undefined ? settingsData.settings.withdrawTier1MinDeposit : 5);
+      setWithdrawTier1MaxDeposit(settingsData.settings.withdrawTier1MaxDeposit !== undefined ? settingsData.settings.withdrawTier1MaxDeposit : 50);
       setUsdtAddressInput(settingsData.settings.usdtAddress || '');
       setUsdtQrCodeInput(settingsData.settings.usdtQrCode || '');
       setAffiliatePayoutNetwork(settingsData.settings.affiliatePayoutNetwork || 'TRC20');
@@ -96,6 +110,12 @@ export default function SettingsTab({ onUpdateSettings }) {
           regularDepositBonus: regularBonusInput,
           referralBonus: referralBonusInput,
           preventDuplicateDeviceAccounts,
+          freeplayMinWithdraw: Number(freeplayMinWithdraw),
+          defaultMinWithdraw: Number(defaultMinWithdraw),
+          withdrawTier1Multiplier: Number(withdrawTier1Multiplier),
+          withdrawTier2Multiplier: Number(withdrawTier2Multiplier),
+          withdrawTier1MinDeposit: Number(withdrawTier1MinDeposit),
+          withdrawTier1MaxDeposit: Number(withdrawTier1MaxDeposit),
           usdtAddress: usdtAddressInput,
           usdtQrCode: usdtQrCodeInput,
           affiliatePayoutNetwork,
@@ -115,7 +135,7 @@ export default function SettingsTab({ onUpdateSettings }) {
         alert('System settings updated successfully!');
         mutate();
         if (onUpdateSettings) {
-          await onUpdateSettings(firstBonusInput, regularBonusInput, referralBonusInput, usdtAddressInput, usdtQrCodeInput, affiliatePayoutNetwork, affiliatePayoutWallet, affiliatePayoutQrCode, affiliatePlatformCommissionRate);
+          await onUpdateSettings();
         }
       } else {
         alert(data.message || 'Failed to update settings.');
@@ -225,6 +245,125 @@ export default function SettingsTab({ onUpdateSettings }) {
                 }} />
               </span>
             </label>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+          <h4 style={{ fontSize: '0.95rem', color: 'var(--gold-primary)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <i className="fa-solid fa-money-bill-transfer" style={{ color: 'var(--gold-primary)' }}></i> Cashout Rules & Deposit Multipliers
+          </h4>
+          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
+            Set minimum withdrawal limits, freeplay rules, and deposit multipliers (5x for $5-$50, 3x for &gt;$50) applied to player allotted coins.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+            <div className="input-group" style={{ margin: 0 }}>
+              <label htmlFor="settings-freeplay-min-cashout">Freeplay Min Cashout ($)</label>
+              <div className="input-wrapper">
+                <i className="fa-solid fa-gift input-icon" style={{ color: '#00ff66' }}></i>
+                <input
+                  type="number"
+                  id="settings-freeplay-min-cashout"
+                  min="1"
+                  placeholder="30"
+                  value={freeplayMinWithdraw}
+                  onChange={(e) => setFreeplayMinWithdraw(e.target.value)}
+                  required
+                />
+                <span style={{ paddingRight: '1rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>$</span>
+              </div>
+              <span className="game-tap-tip">Minimum cashout required when a client plays and requests a cashout with freeplay (Default: $30).</span>
+            </div>
+
+            <div className="input-group" style={{ margin: 0 }}>
+              <label htmlFor="settings-default-min-cashout">Default Min Cashout ($)</label>
+              <div className="input-wrapper">
+                <i className="fa-solid fa-wallet input-icon" style={{ color: '#00d2ff' }}></i>
+                <input
+                  type="number"
+                  id="settings-default-min-cashout"
+                  min="1"
+                  placeholder="25"
+                  value={defaultMinWithdraw}
+                  onChange={(e) => setDefaultMinWithdraw(e.target.value)}
+                  required
+                />
+                <span style={{ paddingRight: '1rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>$</span>
+              </div>
+              <span className="game-tap-tip">Standard minimum withdrawal when no deposit tier rule applies.</span>
+            </div>
+          </div>
+
+          <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '10px', border: '1px solid var(--border-muted)', marginBottom: '1rem' }}>
+            <h5 style={{ fontSize: '0.85rem', color: '#fff', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <i className="fa-solid fa-calculator" style={{ color: '#f59e0b' }}></i> Deposit Tier 1: $5 to $50 Multiplier
+            </h5>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label>Tier 1 Multiplier</label>
+                <div className="input-wrapper">
+                  <i className="fa-solid fa-xmark input-icon" style={{ color: '#f59e0b' }}></i>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="1"
+                    placeholder="5"
+                    value={withdrawTier1Multiplier}
+                    onChange={(e) => setWithdrawTier1Multiplier(e.target.value)}
+                    required
+                  />
+                  <span style={{ paddingRight: '1rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>x</span>
+                </div>
+                <span className="game-tap-tip">Multiplies allotted coins by this value for deposit $5 - $50 (Default: 5x).</span>
+              </div>
+
+              <div className="input-group" style={{ margin: 0 }}>
+                <label>Tier 1 Range (Min to Max $)</label>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="5"
+                    value={withdrawTier1MinDeposit}
+                    onChange={(e) => setWithdrawTier1MinDeposit(e.target.value)}
+                    style={{ width: '50%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '0.5rem', borderRadius: '6px', fontSize: '0.75rem' }}
+                  />
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>to</span>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="50"
+                    value={withdrawTier1MaxDeposit}
+                    onChange={(e) => setWithdrawTier1MaxDeposit(e.target.value)}
+                    style={{ width: '50%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '0.5rem', borderRadius: '6px', fontSize: '0.75rem' }}
+                  />
+                </div>
+                <span className="game-tap-tip">Deposit range where Tier 1 multiplier applies.</span>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '10px', border: '1px solid var(--border-muted)', marginBottom: '1rem' }}>
+            <h5 style={{ fontSize: '0.85rem', color: '#fff', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <i className="fa-solid fa-calculator" style={{ color: '#38bdf8' }}></i> Deposit Tier 2: Above $50 Multiplier
+            </h5>
+            <div className="input-group" style={{ margin: 0 }}>
+              <label>Tier 2 Multiplier (Deposit &gt; ${withdrawTier1MaxDeposit || 50})</label>
+              <div className="input-wrapper">
+                <i className="fa-solid fa-xmark input-icon" style={{ color: '#38bdf8' }}></i>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="1"
+                  placeholder="3"
+                  value={withdrawTier2Multiplier}
+                  onChange={(e) => setWithdrawTier2Multiplier(e.target.value)}
+                  required
+                />
+                <span style={{ paddingRight: '1rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>x</span>
+              </div>
+              <span className="game-tap-tip">Multiplies allotted coins by this value for deposit &gt; $50 (Default: 3x).</span>
+            </div>
           </div>
         </div>
 

@@ -8,7 +8,8 @@ import AppInstallModal from './AppInstallModal';
 import { getWebPushPromptState, getExistingPushSubscription, subscribeToPromoPush, supportsWebPush } from '../lib/pushClient';
 import {
   findLastSuccessDeposit,
-  getDepositBasedMinWithdraw
+  getDepositBasedMinWithdraw,
+  getDepositWithdrawRule
 } from '../lib/withdrawRules';
 import { shouldShowInfoOnLobby } from '../lib/infoPage';
 import ReferralCenter from './ReferralCenter';
@@ -314,6 +315,26 @@ export default function UserLobby({
 
     setIsFreeplaySession(!hasDepositAfterFreeplay && !hasFreeplayWithdrawAfter);
   }, [transactions, activeGame]);
+
+  const withdrawRuleInfo = useMemo(() => {
+    const freeplayMin = Number(frontendSettings?.freeplayMinWithdraw || 30);
+    const defaultMin = Number(frontendSettings?.defaultMinWithdraw || frontendSettings?.minimumWithdrawalLimit || 25);
+    const lastDep = findLastSuccessDeposit(transactions, {
+      userEmail: currentUserEmail,
+      gameTitle: activeGame?.title
+    });
+    const depositRule = getDepositWithdrawRule(lastDep, frontendSettings);
+    const effectiveMin = isFreeplaySession
+      ? freeplayMin
+      : (depositRule?.minWithdraw != null ? depositRule.minWithdraw : defaultMin);
+
+    return {
+      freeplayMin,
+      defaultMin,
+      depositRule,
+      effectiveMin
+    };
+  }, [frontendSettings, transactions, currentUserEmail, activeGame, isFreeplaySession]);
 
   // Signup freeplay (one game) OR deposit $25+ freeplay. Hide claim once a request
   // is already pending/processing until the next eligibility window.
@@ -1315,28 +1336,31 @@ export default function UserLobby({
       showToast('Please enter a valid withdrawal amount.', 'error');
       return;
     }
-    if (amountVal < 25) {
-      showToast('Minimum withdrawal limit is $25.00.', 'error');
-      return;
-    }
-    // Freeplay: must request $100+; coins see full amount, finance still caps at $30
-    if (isFreeplaySession && amountVal < 100) {
-      showToast('Freeplay withdraw request must be at least $100.', 'error');
-      return;
-    }
-    // Last deposit rule: < $50 → ×5 min, ≥ $50 → ×3 min (does not change freeplay / remainder rules)
-    if (!isFreeplaySession) {
+    const freeplayMin = Number(frontendSettings?.freeplayMinWithdraw || 30);
+    const defaultMin = Number(frontendSettings?.defaultMinWithdraw || frontendSettings?.minimumWithdrawalLimit || 25);
+
+    // Freeplay: must request freeplayMin+ (default $30)
+    if (isFreeplaySession) {
+      if (amountVal < freeplayMin) {
+        showToast(`Freeplay withdraw request must be at least $${freeplayMin.toFixed(2)}.`, 'error');
+        return;
+      }
+    } else {
+      // Last deposit rule: $5 to $50 → ×5 min, > $50 → ×3 min applied to allotted coins
       const lastDep = findLastSuccessDeposit(transactions, {
         userEmail: currentUserEmail,
         gameTitle: activeGame?.title
       });
-      const depositMin = getDepositBasedMinWithdraw(lastDep?.amount);
-      if (depositMin != null && amountVal < depositMin) {
-        const mult = Number(lastDep.amount) < 50 ? 5 : 3;
+      const rule = getDepositWithdrawRule(lastDep, frontendSettings);
+      if (rule?.minWithdraw != null && amountVal < rule.minWithdraw) {
         showToast(
-          `Minimum cashout is $${depositMin.toFixed(2)} (last deposit $${parseFloat(lastDep.amount).toFixed(2)} × ${mult}).`,
+          `Minimum cashout is $${rule.minWithdraw.toFixed(2)} (${rule.allottedCoins} coins allotted × ${rule.multiplier}).`,
           'error'
         );
+        return;
+      }
+      if (amountVal < defaultMin) {
+        showToast(`Minimum withdrawal limit is $${defaultMin.toFixed(2)}.`, 'error');
         return;
       }
     }
@@ -1356,6 +1380,37 @@ export default function UserLobby({
     e.preventDefault();
     if (actionLoading) return;
     const amountVal = parseFloat(withdrawAmount);
+    if (isNaN(amountVal) || amountVal <= 0) {
+      showToast('Please enter a valid withdrawal amount.', 'error');
+      return;
+    }
+
+    const freeplayMin = Number(frontendSettings?.freeplayMinWithdraw || 30);
+    const defaultMin = Number(frontendSettings?.defaultMinWithdraw || frontendSettings?.minimumWithdrawalLimit || 25);
+
+    if (isFreeplaySession) {
+      if (amountVal < freeplayMin) {
+        showToast(`Freeplay withdraw request must be at least $${freeplayMin.toFixed(2)}.`, 'error');
+        return;
+      }
+    } else {
+      const lastDep = findLastSuccessDeposit(transactions, {
+        userEmail: currentUserEmail,
+        gameTitle: activeGame?.title
+      });
+      const rule = getDepositWithdrawRule(lastDep, frontendSettings);
+      if (rule?.minWithdraw != null && amountVal < rule.minWithdraw) {
+        showToast(
+          `Minimum cashout is $${rule.minWithdraw.toFixed(2)} (${rule.allottedCoins} coins allotted × ${rule.multiplier}).`,
+          'error'
+        );
+        return;
+      }
+      if (amountVal < defaultMin) {
+        showToast(`Minimum withdrawal limit is $${defaultMin.toFixed(2)}.`, 'error');
+        return;
+      }
+    }
     
     if (shouldShowField('tag') && withdrawTag.trim() === '') {
       showToast('Please provide your payout tag.', 'error');
@@ -3000,19 +3055,10 @@ export default function UserLobby({
                             </h4>
                             <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
                               {isFreeplaySession
-                                ? 'Request $100 or more. Payout to finance is capped at $30.'
-                                : (() => {
-                                    const lastDep = findLastSuccessDeposit(transactions, {
-                                      userEmail: currentUserEmail,
-                                      gameTitle: activeGame?.title
-                                    });
-                                    const depositMin = getDepositBasedMinWithdraw(lastDep?.amount);
-                                    if (depositMin != null) {
-                                      const mult = Number(lastDep.amount) < 50 ? 5 : 3;
-                                      return `Min cashout $${depositMin.toFixed(2)} (last deposit × ${mult}).`;
-                                    }
-                                    return 'Request payout to your preferred tag. Min $25.00.';
-                                  })()}
+                                ? `Min cashout $${withdrawRuleInfo.freeplayMin.toFixed(2)}. Payout to finance is capped at $${withdrawRuleInfo.freeplayMin.toFixed(2)}.`
+                                : (withdrawRuleInfo.depositRule?.minWithdraw != null
+                                    ? `Min cashout $${withdrawRuleInfo.depositRule.minWithdraw.toFixed(2)} (${withdrawRuleInfo.depositRule.allottedCoins} coins × ${withdrawRuleInfo.depositRule.multiplier}).`
+                                    : `Request payout to your preferred tag. Min $${withdrawRuleInfo.defaultMin.toFixed(2)}.`)}
                             </p>
                           </div>
                           <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(239,68,68,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f87171' }}>
@@ -3035,10 +3081,10 @@ export default function UserLobby({
                               )}
                               <input
                                 type="number"
-                                placeholder={isFreeplaySession ? '100' : '25'}
+                                placeholder={String(withdrawRuleInfo.effectiveMin)}
                                 value={withdrawAmount}
                                 onChange={(e) => setWithdrawAmount(e.target.value)}
-                                min={isFreeplaySession ? 100 : 25}
+                                min={withdrawRuleInfo.effectiveMin}
                                 step="0.01"
                                 style={{ padding: '0.75rem 1rem', paddingLeft: isFreeplaySession ? '5.5rem' : '1rem' }}
                                 required
