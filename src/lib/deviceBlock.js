@@ -196,17 +196,19 @@ export function getRolePostTitle(role = '') {
 /**
  * Check if a device ID or fingerprint is permanently blocked in blockedDevices collection.
  */
-export async function isDeviceBlocked(db, deviceId, deviceFingerprint) {
-  if (!deviceId && !deviceFingerprint) return false;
+export async function isDeviceBlocked(db, deviceId, deviceFingerprint, hardwareFingerprint = '') {
+  if (!deviceId && !deviceFingerprint && !hardwareFingerprint) return false;
 
   const cleanId = typeof deviceId === 'string' ? deviceId.trim() : '';
   const cleanFp = typeof deviceFingerprint === 'string' ? deviceFingerprint.trim() : '';
+  const cleanHfp = typeof hardwareFingerprint === 'string' ? hardwareFingerprint.trim() : '';
 
-  if (!cleanId && !cleanFp) return false;
+  if (!cleanId && !cleanFp && !cleanHfp) return false;
 
   const conditions = [];
   if (cleanId) conditions.push({ deviceId: cleanId });
   if (cleanFp) conditions.push({ deviceFingerprint: cleanFp });
+  if (cleanHfp) conditions.push({ hardwareFingerprint: cleanHfp });
 
   const blocked = await db.collection('blockedDevices').findOne({
     $or: conditions
@@ -218,25 +220,32 @@ export async function isDeviceBlocked(db, deviceId, deviceFingerprint) {
 /**
  * Permanently block a device ID and fingerprint. Irreversible operation.
  */
-export async function blockDevicePermanently(db, { deviceId, deviceFingerprint, blockedBy, reason }) {
+export async function blockDevicePermanently(db, { deviceId, deviceFingerprint, hardwareFingerprint, blockedBy, reason }) {
   const cleanId = typeof deviceId === 'string' ? deviceId.trim() : '';
   const cleanFp = typeof deviceFingerprint === 'string' ? deviceFingerprint.trim() : '';
+  const cleanHfp = typeof hardwareFingerprint === 'string' ? hardwareFingerprint.trim() : '';
 
-  if (!cleanId && !cleanFp) {
+  if (!cleanId && !cleanFp && !cleanHfp) {
     throw new Error('Device ID or Fingerprint is required to block a device.');
   }
 
   const record = {
     deviceId: cleanId,
     deviceFingerprint: cleanFp,
+    hardwareFingerprint: cleanHfp,
     blockedBy: blockedBy || 'super_admin',
     reason: reason || 'Permanently blocked by Super Admin',
     isPermanent: true,
     blockedAt: new Date()
   };
 
+  const matchFilter = [];
+  if (cleanId) matchFilter.push({ deviceId: cleanId });
+  if (cleanFp) matchFilter.push({ deviceFingerprint: cleanFp });
+  if (cleanHfp) matchFilter.push({ hardwareFingerprint: cleanHfp });
+
   await db.collection('blockedDevices').updateOne(
-    { $or: [{ deviceId: cleanId }, { deviceFingerprint: cleanFp }].filter((c) => Object.values(c)[0]) },
+    { $or: matchFilter },
     { $set: record },
     { upsert: true }
   );
@@ -245,6 +254,7 @@ export async function blockDevicePermanently(db, { deviceId, deviceFingerprint, 
   const updateFilter = [];
   if (cleanId) updateFilter.push({ deviceId: cleanId });
   if (cleanFp) updateFilter.push({ deviceFingerprint: cleanFp });
+  if (cleanHfp) updateFilter.push({ hardwareFingerprint: cleanHfp });
 
   await db.collection('deviceSessions').updateMany(
     { $or: updateFilter },
@@ -257,16 +267,19 @@ export async function blockDevicePermanently(db, { deviceId, deviceFingerprint, 
 /**
  * Log or update an active device session in MongoDB.
  */
-export async function trackDeviceSession(db, { email, name, role, deviceId, deviceFingerprint, userAgent, ip, isApp, appType, deviceModel }) {
+export async function trackDeviceSession(db, { email, name, role, deviceId, deviceFingerprint, hardwareFingerprint, userAgent, ip, isApp, appType, deviceModel }) {
   if (!email) return;
 
   const cleanEmail = email.toLowerCase().trim();
   const cleanFp = typeof deviceFingerprint === 'string' ? deviceFingerprint.trim() : '';
+  const cleanHfp = typeof hardwareFingerprint === 'string' ? hardwareFingerprint.trim() : '';
   let cleanId = typeof deviceId === 'string' ? deviceId.trim() : '';
 
   if (!cleanId) {
     if (cleanFp) {
       cleanId = `fp-${cleanFp.slice(0, 16)}`;
+    } else if (cleanHfp) {
+      cleanId = `hfp-${cleanHfp.slice(0, 16)}`;
     } else {
       // Deterministic fallback ID based on user and user-agent
       cleanId = `dev-${Buffer.from(`${cleanEmail}:${userAgent || 'web'}`).toString('hex').slice(0, 16)}`;
@@ -285,6 +298,7 @@ export async function trackDeviceSession(db, { email, name, role, deviceId, devi
     postColor: postInfo.color,
     deviceId: cleanId,
     deviceFingerprint: cleanFp,
+    hardwareFingerprint: cleanHfp,
     deviceName: uaParsed.deviceName,
     os: uaParsed.os,
     browser: uaParsed.browser,
@@ -308,7 +322,7 @@ export async function trackDeviceSession(db, { email, name, role, deviceId, devi
   );
 
   // If real client fingerprint ID is present, remove old server fallback session records
-  if (cleanId.startsWith('did_') || cleanId.startsWith('fp_')) {
+  if (cleanId.startsWith('did_') || cleanId.startsWith('fp_') || cleanId.startsWith('hfp_')) {
     db.collection('deviceSessions').deleteMany({
       email: cleanEmail,
       deviceId: { $regex: '^dev-' }
@@ -320,12 +334,13 @@ export async function trackDeviceSession(db, { email, name, role, deviceId, devi
  * Unlinks / clears device binding from user(s) and sessions in MongoDB.
  * Frees the device so new accounts can be registered from it without triggering the duplicate account error.
  */
-export async function unlinkDeviceRecord(db, { email, deviceId, deviceFingerprint }) {
+export async function unlinkDeviceRecord(db, { email, deviceId, deviceFingerprint, hardwareFingerprint }) {
   const cleanEmail = email ? String(email).toLowerCase().trim() : '';
   const cleanId = deviceId ? String(deviceId).trim() : '';
   const cleanFp = deviceFingerprint ? String(deviceFingerprint).trim() : '';
+  const cleanHfp = hardwareFingerprint ? String(hardwareFingerprint).trim() : '';
 
-  if (!cleanEmail && !cleanId && !cleanFp) {
+  if (!cleanEmail && !cleanId && !cleanFp && !cleanHfp) {
     throw new Error('Email, Device ID, or Fingerprint is required to unlink a device.');
   }
 
@@ -337,19 +352,22 @@ export async function unlinkDeviceRecord(db, { email, deviceId, deviceFingerprin
 
   const effectiveDeviceId = cleanId || (targetUser?.deviceId ? String(targetUser.deviceId).trim() : '');
   const effectiveFingerprint = cleanFp || (targetUser?.deviceFingerprint ? String(targetUser.deviceFingerprint).trim() : '');
+  const effectiveHardwareFp = cleanHfp || (targetUser?.hardwareFingerprint ? String(targetUser.hardwareFingerprint).trim() : '');
 
   const userConditions = [];
   if (cleanEmail) userConditions.push({ email: cleanEmail });
   if (effectiveDeviceId) userConditions.push({ deviceId: effectiveDeviceId });
   if (effectiveFingerprint) userConditions.push({ deviceFingerprint: effectiveFingerprint });
+  if (effectiveHardwareFp) userConditions.push({ hardwareFingerprint: effectiveHardwareFp });
 
-  // 1. Unset deviceId & deviceFingerprint in users collection
+  // 1. Unset deviceId, deviceFingerprint & hardwareFingerprint in users collection
   const usersResult = await db.collection('users').updateMany(
     { $or: userConditions },
     {
       $unset: {
         deviceId: '',
         deviceFingerprint: '',
+        hardwareFingerprint: '',
         registrationIp: '',
         registrationUserAgent: ''
       }
@@ -361,6 +379,7 @@ export async function unlinkDeviceRecord(db, { email, deviceId, deviceFingerprin
   if (cleanEmail) sessionConditions.push({ email: cleanEmail });
   if (effectiveDeviceId) sessionConditions.push({ deviceId: effectiveDeviceId });
   if (effectiveFingerprint) sessionConditions.push({ deviceFingerprint: effectiveFingerprint });
+  if (effectiveHardwareFp) sessionConditions.push({ hardwareFingerprint: effectiveHardwareFp });
 
   const sessionResult = await db.collection('deviceSessions').deleteMany({
     $or: sessionConditions

@@ -36,7 +36,7 @@ async function loginWithGoogleProfile(accessToken) {
     throw new Error('Failed to fetch email profile from Google.');
   }
 
-  const { deviceId, deviceFingerprint } = getDevicePayload();
+  const { deviceId, deviceFingerprint, hardwareFingerprint } = getDevicePayload();
 
   const googleRes = await fetch('/api/auth/google', {
     method: 'POST',
@@ -49,7 +49,8 @@ async function loginWithGoogleProfile(accessToken) {
       agentCode: localStorage.getItem('jackpot_agent_code') || '',
       campaign: localStorage.getItem('jackpot_campaign') || '',
       deviceId,
-      deviceFingerprint
+      deviceFingerprint,
+      hardwareFingerprint
     })
   });
   const googleData = await googleRes.json();
@@ -536,8 +537,8 @@ export default function AuthPortal({
     }
 
     try {
-      const { deviceId, deviceFingerprint } = getDevicePayload();
-      const checkRes = await fetch(`/api/auth/register?email=${encodeURIComponent(regEmail.trim())}&deviceId=${encodeURIComponent(deviceId)}&deviceFingerprint=${encodeURIComponent(deviceFingerprint)}`);
+      const { deviceId, deviceFingerprint, hardwareFingerprint } = getDevicePayload();
+      const checkRes = await fetch(`/api/auth/register?email=${encodeURIComponent(regEmail.trim())}&deviceId=${encodeURIComponent(deviceId)}&deviceFingerprint=${encodeURIComponent(deviceFingerprint)}&hardwareFingerprint=${encodeURIComponent(hardwareFingerprint || '')}`);
       const checkData = await checkRes.json();
       
       if (checkData.deviceRegistered) {
@@ -567,7 +568,8 @@ export default function AuthPortal({
         agentCode: localStorage.getItem('jackpot_agent_code') || '',
         campaign: localStorage.getItem('jackpot_campaign') || '',
         deviceId,
-        deviceFingerprint
+        deviceFingerprint,
+        hardwareFingerprint
       };
 
       triggerLoading(1200, () => {

@@ -1,15 +1,18 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '../../../../lib/mongodb';
 import { healOrphanedDistributorPlayer } from '../../../../lib/orphanDistributorPlayer';
+import { trackDeviceSession } from '../../../../lib/deviceBlock';
 import crypto from 'crypto';
 
 function generateReferralCode() {
   return crypto.randomBytes(4).toString('hex').toUpperCase();
 }
 
+const STAFF_ROLES = ['admin', 'super_admin', 'owner', 'financial_admin', 'coins_admin', 'support_admin', 'operation_admin', 'distributor', 'distributor_staff'];
+
 export async function POST(req) {
   try {
-    const { email, name, referredBy, distributorId, agentCode, campaign, deviceId, deviceFingerprint } = await req.json();
+    const { email, name, referredBy, distributorId, agentCode, campaign, deviceId, deviceFingerprint, hardwareFingerprint } = await req.json();
 
     if (!email || !name) {
       return NextResponse.json(
@@ -21,6 +24,13 @@ export async function POST(req) {
     const cleanEmail = email.toLowerCase().trim();
     const cleanDeviceId = typeof deviceId === 'string' ? deviceId.trim() : '';
     const cleanFingerprint = typeof deviceFingerprint === 'string' ? deviceFingerprint.trim() : '';
+    const cleanHardwareFp = typeof hardwareFingerprint === 'string' ? hardwareFingerprint.trim() : '';
+
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+                     req.headers.get('x-real-ip') ||
+                     req.headers.get('cf-connecting-ip') ||
+                     'unknown';
+    const userAgent = req.headers.get('user-agent') || '';
 
     const db = await getDb();
     const usersCollection = db.collection('users');
@@ -40,29 +50,57 @@ export async function POST(req) {
       const settingsDoc = await db.collection('settings').findOne({ id: 'global_settings' });
       const enforceDeviceLock = settingsDoc?.preventDuplicateDeviceAccounts !== false;
 
-      if (enforceDeviceLock && (cleanDeviceId || cleanFingerprint)) {
-        const deviceConditions = [];
-        if (cleanDeviceId) deviceConditions.push({ deviceId: cleanDeviceId });
-        if (cleanFingerprint) deviceConditions.push({ deviceFingerprint: cleanFingerprint });
+      if (enforceDeviceLock) {
+        let existingDeviceAccount = null;
 
-        if (deviceConditions.length > 0) {
-          const existingDeviceAccount = await usersCollection.findOne({
-            role: { $in: ['user', 'player', '', null] },
-            $or: deviceConditions
+        // 1. Direct device identifiers match
+        const directConditions = [];
+        if (cleanDeviceId) directConditions.push({ deviceId: cleanDeviceId });
+        if (cleanFingerprint) directConditions.push({ deviceFingerprint: cleanFingerprint });
+        if (cleanHardwareFp) directConditions.push({ hardwareFingerprint: cleanHardwareFp });
+
+        if (directConditions.length > 0) {
+          existingDeviceAccount = await usersCollection.findOne({
+            role: { $nin: STAFF_ROLES },
+            $or: directConditions
           });
+        }
 
-          if (existingDeviceAccount) {
-            return NextResponse.json(
-              {
-                success: false,
-                deviceRegistered: true,
-                existingEmail: existingDeviceAccount.email,
-                existingName: existingDeviceAccount.name || '',
-                message: 'You already have an account from this device.'
-              },
-              { status: 400 }
-            );
+        // 2. Cross-browser / incognito match: Same Hardware Fingerprint + Same Registration IP
+        if (!existingDeviceAccount && cleanHardwareFp && clientIp && clientIp !== 'unknown') {
+          existingDeviceAccount = await usersCollection.findOne({
+            role: { $nin: STAFF_ROLES },
+            hardwareFingerprint: cleanHardwareFp,
+            registrationIp: clientIp
+          });
+        }
+
+        // 3. Check active deviceSessions records
+        if (!existingDeviceAccount && (cleanDeviceId || cleanFingerprint || cleanHardwareFp)) {
+          const sessionCond = [];
+          if (cleanDeviceId) sessionCond.push({ deviceId: cleanDeviceId });
+          if (cleanFingerprint) sessionCond.push({ deviceFingerprint: cleanFingerprint });
+          if (cleanHardwareFp) sessionCond.push({ hardwareFingerprint: cleanHardwareFp });
+          const existingSession = await db.collection('deviceSessions').findOne({
+            role: { $nin: STAFF_ROLES },
+            $or: sessionCond
+          });
+          if (existingSession?.email) {
+            existingDeviceAccount = await usersCollection.findOne({ email: existingSession.email.toLowerCase().trim() });
           }
+        }
+
+        if (existingDeviceAccount) {
+          return NextResponse.json(
+            {
+              success: false,
+              deviceRegistered: true,
+              existingEmail: existingDeviceAccount.email,
+              existingName: existingDeviceAccount.name || '',
+              message: 'You already have an account from this device.'
+            },
+            { status: 400 }
+          );
         }
       }
 
@@ -89,12 +127,6 @@ export async function POST(req) {
         }
       }
 
-      const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-                       req.headers.get('x-real-ip') ||
-                       req.headers.get('cf-connecting-ip') ||
-                       'unknown';
-      const userAgent = req.headers.get('user-agent') || '';
-
       // Automatically register brand-new Google users
       matchedUser = {
         name: name.trim(),
@@ -109,6 +141,7 @@ export async function POST(req) {
         campaign: campaign || 'organic',
         deviceId: cleanDeviceId,
         deviceFingerprint: cleanFingerprint,
+        hardwareFingerprint: cleanHardwareFp,
         registrationIp: clientIp,
         registrationUserAgent: userAgent,
         createdAt: new Date().toISOString()
@@ -116,12 +149,28 @@ export async function POST(req) {
       const result = await usersCollection.insertOne(matchedUser);
       matchedUser._id = result.insertedId;
       isNewUser = true;
+
+      trackDeviceSession(db, {
+        email: cleanEmail,
+        name: matchedUser.name,
+        role: matchedUser.role,
+        deviceId: cleanDeviceId,
+        deviceFingerprint: cleanFingerprint,
+        hardwareFingerprint: cleanHardwareFp,
+        userAgent,
+        ip: clientIp
+      }).catch((e) => console.warn('trackDeviceSession on google register:', e?.message || e));
     } else {
       // Existing user logging in: update deviceId if empty
-      if (cleanDeviceId && !matchedUser.deviceId) {
+      const updateFields = {};
+      if (cleanDeviceId && !matchedUser.deviceId) updateFields.deviceId = cleanDeviceId;
+      if (cleanFingerprint && !matchedUser.deviceFingerprint) updateFields.deviceFingerprint = cleanFingerprint;
+      if (cleanHardwareFp && !matchedUser.hardwareFingerprint) updateFields.hardwareFingerprint = cleanHardwareFp;
+
+      if (Object.keys(updateFields).length > 0) {
         await usersCollection.updateOne(
           { _id: matchedUser._id },
-          { $set: { deviceId: cleanDeviceId, ...(cleanFingerprint ? { deviceFingerprint: cleanFingerprint } : {}) } }
+          { $set: updateFields }
         );
       }
     }

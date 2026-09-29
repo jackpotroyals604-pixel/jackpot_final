@@ -65,9 +65,9 @@ export default function useSessionGuard(email, { redirectTo = '/login', interval
     const check = async () => {
       if (cancelled || redirectingRef.current) return;
       try {
-        const { deviceId, deviceFingerprint } = getDevicePayload();
+        const { deviceId, deviceFingerprint, hardwareFingerprint } = getDevicePayload();
         const res = await fetch(
-          `/api/auth/session-status?email=${encodeURIComponent(cleanEmail)}&deviceId=${encodeURIComponent(deviceId)}&deviceFingerprint=${encodeURIComponent(deviceFingerprint)}`,
+          `/api/auth/session-status?email=${encodeURIComponent(cleanEmail)}&deviceId=${encodeURIComponent(deviceId)}&deviceFingerprint=${encodeURIComponent(deviceFingerprint)}&hardwareFingerprint=${encodeURIComponent(hardwareFingerprint || '')}`,
           { cache: 'no-store' }
         );
         const data = await res.json().catch(() => null);

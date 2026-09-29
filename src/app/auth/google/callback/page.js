@@ -12,7 +12,7 @@ async function completeGoogleFromToken(accessToken, sid) {
     throw new Error('Google profile email was missing.');
   }
 
-  const { deviceId, deviceFingerprint } = getDevicePayload();
+  const { deviceId, deviceFingerprint, hardwareFingerprint } = getDevicePayload();
 
   const googleRes = await fetch('/api/auth/google', {
     method: 'POST',
@@ -25,7 +25,8 @@ async function completeGoogleFromToken(accessToken, sid) {
       agentCode: localStorage.getItem('jackpot_agent_code') || '',
       campaign: localStorage.getItem('jackpot_campaign') || '',
       deviceId,
-      deviceFingerprint
+      deviceFingerprint,
+      hardwareFingerprint
     })
   });
   const googleData = await googleRes.json();

@@ -13,6 +13,7 @@ export async function GET(req) {
     const email = String(searchParams.get('email') || '').toLowerCase().trim();
     const deviceId = searchParams.get('deviceId');
     const deviceFingerprint = searchParams.get('deviceFingerprint');
+    const hardwareFingerprint = searchParams.get('hardwareFingerprint');
 
     if (!email) {
       return NextResponse.json({ success: false, valid: false, message: 'Email required.' }, { status: 400 });
@@ -21,7 +22,7 @@ export async function GET(req) {
     const db = await getDb();
 
     // Check permanent device ban
-    if (await isDeviceBlocked(db, deviceId, deviceFingerprint)) {
+    if (await isDeviceBlocked(db, deviceId, deviceFingerprint, hardwareFingerprint)) {
       return NextResponse.json({
         success: true,
         valid: false,
@@ -69,6 +70,7 @@ export async function GET(req) {
         role: user.role,
         deviceId,
         deviceFingerprint,
+        hardwareFingerprint,
         userAgent,
         ip
       }).catch(() => {});

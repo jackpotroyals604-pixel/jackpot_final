@@ -89,18 +89,83 @@ function getWebGLFingerprint() {
   }
 }
 
+let _cachedDeviceId = '';
+const DB_NAME = 'jackpot_device_store';
+const STORE_NAME = 'device_meta';
+
+// Asynchronously sync device ID with IndexedDB (survives basic cookie / site data clears)
+function syncIndexedDB(currentId) {
+  if (typeof window === 'undefined' || !window.indexedDB) return;
+  try {
+    const req = window.indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+    req.onsuccess = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) return;
+      
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const getReq = store.get('deviceId');
+      getReq.onsuccess = () => {
+        const idbId = getReq.result;
+        if (idbId && typeof idbId === 'string' && idbId.trim()) {
+          _cachedDeviceId = idbId.trim();
+          try {
+            if (!localStorage.getItem(DEVICE_ID_KEY)) {
+              localStorage.setItem(DEVICE_ID_KEY, idbId.trim());
+            }
+          } catch (err) {}
+          try {
+            if (!sessionStorage.getItem(DEVICE_ID_KEY)) {
+              sessionStorage.setItem(DEVICE_ID_KEY, idbId.trim());
+            }
+          } catch (err) {}
+          if (!getCookie(COOKIE_KEY)) {
+            setCookie(COOKIE_KEY, idbId.trim());
+          }
+        } else if (currentId && typeof currentId === 'string') {
+          try {
+            store.put(currentId.trim(), 'deviceId');
+          } catch (wErr) {}
+        }
+      };
+    };
+  } catch (e) {}
+}
+
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    try {
+      const initialId = getOrCreateDeviceId();
+      syncIndexedDB(initialId);
+    } catch (e) {}
+  }, 30);
+}
+
 /**
  * Get or create persistent Device ID
- * Stored across localStorage and persistent cookies for survival against single-storage clears.
+ * Stored across localStorage, sessionStorage, persistent cookies and IndexedDB
+ * for bulletproof survival against single-storage clears.
  */
 export function getOrCreateDeviceId() {
   if (typeof window === 'undefined') return '';
 
+  if (_cachedDeviceId) return _cachedDeviceId;
+
   let id = '';
   try {
     id = localStorage.getItem(DEVICE_ID_KEY) || '';
-  } catch (e) {
-    // localStorage might be restricted
+  } catch (e) {}
+
+  if (!id) {
+    try {
+      id = sessionStorage.getItem(DEVICE_ID_KEY) || '';
+    } catch (e) {}
   }
 
   if (!id) {
@@ -111,14 +176,86 @@ export function getOrCreateDeviceId() {
     id = generateUUID();
   }
 
-  // Ensure persisted in both locations
+  _cachedDeviceId = id;
+
+  // Persist across all available client storage tiers
   try {
     localStorage.setItem(DEVICE_ID_KEY, id);
   } catch (e) {}
-
+  try {
+    sessionStorage.setItem(DEVICE_ID_KEY, id);
+  } catch (e) {}
   setCookie(COOKIE_KEY, id);
+  syncIndexedDB(id);
 
   return id;
+}
+
+/**
+ * Normalized Hardware Fingerprint
+ * Independent of browser, incognito mode, language or orientation!
+ * Extracts true physical hardware specifications (GPU, screen, cores, touch, memory, audio DSP).
+ */
+export function getHardwareFingerprint() {
+  if (typeof window === 'undefined') return '';
+
+  try {
+    const screenW = typeof window.screen !== 'undefined' ? window.screen.width : 0;
+    const screenH = typeof window.screen !== 'undefined' ? window.screen.height : 0;
+    const minDim = Math.min(screenW, screenH);
+    const maxDim = Math.max(screenW, screenH);
+    const colorDepth = window.screen?.colorDepth || 24;
+    const pixelRatio = Math.round((window.devicePixelRatio || 1) * 100) / 100;
+    const cores = navigator.hardwareConcurrency || 0;
+    const touch = navigator.maxTouchPoints || 0;
+    const memory = navigator.deviceMemory || 0;
+    const tz = typeof Intl !== 'undefined' && Intl.DateTimeFormat ? Intl.DateTimeFormat().resolvedOptions().timeZone || '' : '';
+    const platform = (navigator.userAgentData?.platform || navigator.platform || '').toLowerCase();
+
+    // Extract unmasked physical GPU model
+    let glVendor = '';
+    let glRenderer = '';
+    try {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      if (gl) {
+        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+        if (debugInfo) {
+          glVendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) || '';
+          glRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || '';
+        }
+      }
+    } catch (e) {}
+
+    // AudioContext DSP hardware sample rate
+    let audioSignature = '';
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        const audioCtx = new AudioCtx();
+        audioSignature = `${audioCtx.sampleRate || 0}`;
+        audioCtx.close().catch(() => {});
+      }
+    } catch (e) {}
+
+    const rawHardware = [
+      `${minDim}x${maxDim}`,
+      colorDepth,
+      pixelRatio,
+      cores,
+      touch,
+      memory,
+      tz,
+      platform,
+      glVendor,
+      glRenderer,
+      audioSignature
+    ].join('::');
+
+    return 'hfp_' + hashString(rawHardware);
+  } catch (e) {
+    return '';
+  }
 }
 
 /**
@@ -132,9 +269,11 @@ export function getDeviceFingerprint() {
     if (cached) return cached;
   } catch (e) {}
 
-  const screenInfo = typeof window !== 'undefined' && window.screen
-    ? `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}x${window.devicePixelRatio || 1}`
-    : 'no-screen';
+  const screenW = typeof window.screen !== 'undefined' ? window.screen.width : 0;
+  const screenH = typeof window.screen !== 'undefined' ? window.screen.height : 0;
+  const minDim = Math.min(screenW, screenH);
+  const maxDim = Math.max(screenW, screenH);
+  const screenInfo = `${minDim}x${maxDim}x${window.screen?.colorDepth || 24}x${Math.round((window.devicePixelRatio || 1) * 100) / 100}`;
 
   const tz = typeof Intl !== 'undefined' && Intl.DateTimeFormat
     ? Intl.DateTimeFormat().resolvedOptions().timeZone || ''
@@ -148,7 +287,6 @@ export function getDeviceFingerprint() {
     tz,
     tzOffset,
     nav.language || '',
-    (nav.languages || []).join(','),
     nav.hardwareConcurrency || '0',
     nav.maxTouchPoints || '0',
     nav.platform || '',
@@ -170,7 +308,7 @@ export function getDeviceFingerprint() {
  */
 export function getDevicePayload() {
   if (typeof window === 'undefined') {
-    return { deviceId: '', deviceFingerprint: '', isApp: false, appType: 'BROWSER', clientPlatform: '' };
+    return { deviceId: '', deviceFingerprint: '', hardwareFingerprint: '', isApp: false, appType: 'BROWSER', clientPlatform: '' };
   }
 
   const isStandalone = Boolean(
@@ -186,6 +324,7 @@ export function getDevicePayload() {
   return {
     deviceId: getOrCreateDeviceId(),
     deviceFingerprint: getDeviceFingerprint(),
+    hardwareFingerprint: getHardwareFingerprint(),
     isApp: isStandalone,
     appType: isStandalone ? 'PWA_APP' : 'BROWSER',
     clientPlatform: typeof navigator !== 'undefined' ? (navigator.userAgentData?.platform || navigator.platform || '') : ''

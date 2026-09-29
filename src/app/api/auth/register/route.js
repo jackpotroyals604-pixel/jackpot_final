@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '../../../../lib/mongodb';
+import { trackDeviceSession } from '../../../../lib/deviceBlock';
 import crypto from 'crypto';
 
 // Generate a short unique alphanumeric referral code
 function generateReferralCode() {
   return crypto.randomBytes(4).toString('hex').toUpperCase(); // e.g. "A3F8B12C"
 }
+
+const STAFF_ROLES = ['admin', 'super_admin', 'owner', 'financial_admin', 'coins_admin', 'support_admin', 'operation_admin', 'distributor', 'distributor_staff'];
 
 // GET checks if an email exists and returns registration details for otp flows, or checks device status
 export async function GET(req) {
@@ -14,7 +17,13 @@ export async function GET(req) {
     const email = searchParams.get('email');
     const deviceId = searchParams.get('deviceId');
     const deviceFingerprint = searchParams.get('deviceFingerprint');
+    const hardwareFingerprint = searchParams.get('hardwareFingerprint');
     const checkDeviceOnly = searchParams.get('checkDevice') === 'true';
+
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+                     req.headers.get('x-real-ip') ||
+                     req.headers.get('cf-connecting-ip') ||
+                     'unknown';
 
     const db = await getDb();
     const usersCollection = db.collection('users');
@@ -23,33 +32,61 @@ export async function GET(req) {
     const settingsDoc = await db.collection('settings').findOne({ id: 'global_settings' });
     const enforceDeviceLock = settingsDoc?.preventDuplicateDeviceAccounts !== false;
 
-    if (enforceDeviceLock && (deviceId || deviceFingerprint)) {
-      const deviceConditions = [];
-      if (deviceId && typeof deviceId === 'string' && deviceId.trim()) {
-        deviceConditions.push({ deviceId: deviceId.trim() });
-      }
-      if (deviceFingerprint && typeof deviceFingerprint === 'string' && deviceFingerprint.trim()) {
-        deviceConditions.push({ deviceFingerprint: deviceFingerprint.trim() });
-      }
+    if (enforceDeviceLock) {
+      const cleanId = typeof deviceId === 'string' ? deviceId.trim() : '';
+      const cleanFp = typeof deviceFingerprint === 'string' ? deviceFingerprint.trim() : '';
+      const cleanHfp = typeof hardwareFingerprint === 'string' ? hardwareFingerprint.trim() : '';
 
-      if (deviceConditions.length > 0) {
-        const existingDeviceUser = await usersCollection.findOne({
-          role: { $in: ['user', 'player', '', null] },
-          $or: deviceConditions
+      let existingDeviceUser = null;
+
+      // Check direct device identifiers
+      const directConditions = [];
+      if (cleanId) directConditions.push({ deviceId: cleanId });
+      if (cleanFp) directConditions.push({ deviceFingerprint: cleanFp });
+      if (cleanHfp) directConditions.push({ hardwareFingerprint: cleanHfp });
+
+      if (directConditions.length > 0) {
+        existingDeviceUser = await usersCollection.findOne({
+          role: { $nin: STAFF_ROLES },
+          $or: directConditions
         });
+      }
 
-        if (existingDeviceUser) {
-          // If checking device only or if email matches a DIFFERENT user
-          if (checkDeviceOnly || !email || existingDeviceUser.email.toLowerCase() !== email.toLowerCase().trim()) {
-            return NextResponse.json({
-              success: true,
-              exists: false,
-              deviceRegistered: true,
-              existingEmail: existingDeviceUser.email,
-              existingName: existingDeviceUser.name || '',
-              message: 'You already have an account from this device.'
-            });
-          }
+      // Check cross-browser / incognito on same physical hardware + same IP
+      if (!existingDeviceUser && cleanHfp && clientIp && clientIp !== 'unknown') {
+        existingDeviceUser = await usersCollection.findOne({
+          role: { $nin: STAFF_ROLES },
+          hardwareFingerprint: cleanHfp,
+          registrationIp: clientIp
+        });
+      }
+
+      // Check deviceSessions records
+      if (!existingDeviceUser && (cleanId || cleanFp || cleanHfp)) {
+        const sessionCond = [];
+        if (cleanId) sessionCond.push({ deviceId: cleanId });
+        if (cleanFp) sessionCond.push({ deviceFingerprint: cleanFp });
+        if (cleanHfp) sessionCond.push({ hardwareFingerprint: cleanHfp });
+        const existingSession = await db.collection('deviceSessions').findOne({
+          role: { $nin: STAFF_ROLES },
+          $or: sessionCond
+        });
+        if (existingSession?.email) {
+          existingDeviceUser = await usersCollection.findOne({ email: existingSession.email.toLowerCase().trim() });
+        }
+      }
+
+      if (existingDeviceUser) {
+        // If checking device only or if email matches a DIFFERENT user
+        if (checkDeviceOnly || !email || existingDeviceUser.email.toLowerCase() !== email.toLowerCase().trim()) {
+          return NextResponse.json({
+            success: true,
+            exists: false,
+            deviceRegistered: true,
+            existingEmail: existingDeviceUser.email,
+            existingName: existingDeviceUser.name || '',
+            message: 'You already have an account from this device.'
+          });
         }
       }
     }
@@ -89,7 +126,7 @@ export async function GET(req) {
 // POST registers a new user
 export async function POST(req) {
   try {
-    const { email, password, name, role, referredBy, distributorId, agentCode, campaign, allowedGameIds, deviceId, deviceFingerprint } = await req.json();
+    const { email, password, name, role, referredBy, distributorId, agentCode, campaign, allowedGameIds, deviceId, deviceFingerprint, hardwareFingerprint } = await req.json();
 
     if (!email || !password || !name) {
       return NextResponse.json(
@@ -101,6 +138,13 @@ export async function POST(req) {
     const cleanEmail = email.toLowerCase().trim();
     const cleanDeviceId = typeof deviceId === 'string' ? deviceId.trim() : '';
     const cleanFingerprint = typeof deviceFingerprint === 'string' ? deviceFingerprint.trim() : '';
+    const cleanHardwareFp = typeof hardwareFingerprint === 'string' ? hardwareFingerprint.trim() : '';
+
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+                     req.headers.get('x-real-ip') ||
+                     req.headers.get('cf-connecting-ip') ||
+                     'unknown';
+    const userAgent = req.headers.get('user-agent') || '';
 
     const db = await getDb();
     const usersCollection = db.collection('users');
@@ -121,29 +165,64 @@ export async function POST(req) {
     const settingsDoc = await db.collection('settings').findOne({ id: 'global_settings' });
     const enforceDeviceLock = settingsDoc?.preventDuplicateDeviceAccounts !== false;
 
-    if (enforceDeviceLock && isPlayer && (cleanDeviceId || cleanFingerprint)) {
-      const deviceConditions = [];
-      if (cleanDeviceId) deviceConditions.push({ deviceId: cleanDeviceId });
-      if (cleanFingerprint) deviceConditions.push({ deviceFingerprint: cleanFingerprint });
+    if (enforceDeviceLock && isPlayer) {
+      // Require device tokens — prevent automated/script bypass with empty device fields
+      if (!cleanDeviceId && !cleanFingerprint && !cleanHardwareFp) {
+        return NextResponse.json(
+          { success: false, message: 'Device verification is required to register an account.' },
+          { status: 400 }
+        );
+      }
 
-      if (deviceConditions.length > 0) {
-        const existingDeviceAccount = await usersCollection.findOne({
-          role: { $in: ['user', 'player', '', null] },
-          $or: deviceConditions
+      let existingDeviceAccount = null;
+
+      // 1. Check direct device identifiers
+      const directConditions = [];
+      if (cleanDeviceId) directConditions.push({ deviceId: cleanDeviceId });
+      if (cleanFingerprint) directConditions.push({ deviceFingerprint: cleanFingerprint });
+      if (cleanHardwareFp) directConditions.push({ hardwareFingerprint: cleanHardwareFp });
+
+      if (directConditions.length > 0) {
+        existingDeviceAccount = await usersCollection.findOne({
+          role: { $nin: STAFF_ROLES },
+          $or: directConditions
         });
+      }
 
-        if (existingDeviceAccount) {
-          return NextResponse.json(
-            { success: false, message: 'You already have an account from this device.' },
-            { status: 400 }
-          );
+      // 2. Check cross-browser / incognito on same physical hardware + same IP
+      if (!existingDeviceAccount && cleanHardwareFp && clientIp && clientIp !== 'unknown') {
+        existingDeviceAccount = await usersCollection.findOne({
+          role: { $nin: STAFF_ROLES },
+          hardwareFingerprint: cleanHardwareFp,
+          registrationIp: clientIp
+        });
+      }
+
+      // 3. Check active deviceSessions records
+      if (!existingDeviceAccount && (cleanDeviceId || cleanFingerprint || cleanHardwareFp)) {
+        const sessionCond = [];
+        if (cleanDeviceId) sessionCond.push({ deviceId: cleanDeviceId });
+        if (cleanFingerprint) sessionCond.push({ deviceFingerprint: cleanFingerprint });
+        if (cleanHardwareFp) sessionCond.push({ hardwareFingerprint: cleanHardwareFp });
+        const existingSession = await db.collection('deviceSessions').findOne({
+          role: { $nin: STAFF_ROLES },
+          $or: sessionCond
+        });
+        if (existingSession?.email) {
+          existingDeviceAccount = await usersCollection.findOne({ email: existingSession.email.toLowerCase().trim() });
         }
+      }
+
+      if (existingDeviceAccount) {
+        return NextResponse.json(
+          { success: false, message: 'You already have an account from this device.' },
+          { status: 400 }
+        );
       }
     }
 
     // Generate a unique referral code for this new user
     let referralCode = generateReferralCode();
-    // Ensure uniqueness
     while (await usersCollection.findOne({ referralCode })) {
       referralCode = generateReferralCode();
     }
@@ -165,13 +244,6 @@ export async function POST(req) {
       }
     }
 
-    // Client IP & User Agent extraction
-    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-                     req.headers.get('x-real-ip') ||
-                     req.headers.get('cf-connecting-ip') ||
-                     'unknown';
-    const userAgent = req.headers.get('user-agent') || '';
-
     const newUser = {
       name: name.trim(),
       email: cleanEmail,
@@ -185,6 +257,7 @@ export async function POST(req) {
       campaign: campaign || 'organic',
       deviceId: cleanDeviceId,
       deviceFingerprint: cleanFingerprint,
+      hardwareFingerprint: cleanHardwareFp,
       registrationIp: clientIp,
       registrationUserAgent: userAgent,
       createdAt: new Date().toISOString()
@@ -201,6 +274,18 @@ export async function POST(req) {
 
     const result = await usersCollection.insertOne(newUser);
     newUser._id = result.insertedId;
+
+    // Immediately track the new device session so multi-account locks apply on the spot
+    trackDeviceSession(db, {
+      email: cleanEmail,
+      name: newUser.name,
+      role: newUser.role,
+      deviceId: cleanDeviceId,
+      deviceFingerprint: cleanFingerprint,
+      hardwareFingerprint: cleanHardwareFp,
+      userAgent,
+      ip: clientIp
+    }).catch((e) => console.warn('trackDeviceSession on register:', e?.message || e));
 
     return NextResponse.json({
       success: true,
