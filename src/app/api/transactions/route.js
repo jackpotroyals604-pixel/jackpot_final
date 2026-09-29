@@ -1015,6 +1015,65 @@ export async function POST(req) {
           }
         }
       }
+
+      if (!isCancelledOrTimedOut) {
+        const priorDeposit = await transactionsCollection.findOne(
+          {
+            userEmail: userEmail.toLowerCase().trim(),
+            type: 'DEPOSIT',
+            status: { $in: ['SUCCESS', 'COINS_LOADING', 'PENDING'] },
+            id: { $ne: txObject.id }
+          },
+          { projection: { _id: 1 } }
+        );
+
+        let settings = cache.get('global_settings');
+        let frontendSettings = cache.get('frontend_settings_all');
+        const settingsCollection = db.collection('settings');
+
+        const [settingsFresh, frontendFresh, depositor] = await Promise.all([
+          settings ? Promise.resolve(null) : settingsCollection.findOne({ id: 'global_settings' }),
+          frontendSettings ? Promise.resolve(null) : settingsCollection.findOne({ id: 'frontend_settings' }),
+          db.collection('users').findOne(
+            { email: userEmail.toLowerCase().trim() },
+            { projection: { email: 1, referredBy: 1, pendingDepositBonusPercent: 1 } }
+          )
+        ]);
+        if (settingsFresh) {
+          settings = settingsFresh;
+          cache.set('global_settings', settingsFresh, 60);
+        }
+        if (frontendFresh) {
+          frontendSettings = frontendFresh;
+          cache.set('frontend_settings_all', frontendFresh, 60);
+        }
+
+        const isFirstDeposit = !priorDeposit;
+
+        const firstBonusPercent = (frontendSettings && frontendSettings.firstDepositBonus !== undefined)
+          ? Number(frontendSettings.firstDepositBonus)
+          : (settings ? Number(settings.firstDepositBonus) : 300);
+
+        const regularBonusPercent = (frontendSettings && frontendSettings.regularDepositBonus !== undefined)
+          ? Number(frontendSettings.regularDepositBonus)
+          : (settings ? Number(settings.regularDepositBonus) : 20);
+
+        const rawPromoBonus = depositor ? depositor.pendingDepositBonusPercent : undefined;
+        const promoBonusPercent = (rawPromoBonus !== undefined && rawPromoBonus !== null) ? Number(rawPromoBonus) : null;
+        const usePromoBonus = promoBonusPercent !== null && promoBonusPercent > 0;
+
+        const bonusPercentage = usePromoBonus
+          ? promoBonusPercent
+          : (isFirstDeposit ? firstBonusPercent : regularBonusPercent);
+
+        const amount = parseFloat(txObject.amount) || 0;
+        const rawCoins = amount * (1 + bonusPercentage / 100);
+        const totalCoins = Math.floor(Number(rawCoins) || 0);
+
+        txObject.bonusApplied = bonusPercentage;
+        txObject.totalCoins = totalCoins;
+        txObject.gameAmount = totalCoins;
+      }
     }
 
     if (!isCancelledOrTimedOut && txObject.type === 'WITHDRAW') {
@@ -1507,6 +1566,10 @@ export async function PUT(req) {
           ? Number(frontendSettings.firstDepositBonus)
           : (settings ? Number(settings.firstDepositBonus) : 300);
 
+        const regularBonusPercent = (frontendSettings && frontendSettings.regularDepositBonus !== undefined)
+          ? Number(frontendSettings.regularDepositBonus)
+          : (settings ? Number(settings.regularDepositBonus) : 20);
+
         // Promo deposit bonus: if the player claimed a "deposit bonus" promotion,
         // their next approved deposit uses that promo % instead of the default
         // first/regular bonus, and any bundled freeplay is auto-granted below.
@@ -1517,12 +1580,16 @@ export async function PUT(req) {
         const isBonus = originalTx.type === 'BONUS';
         const bonusPercentage = isBonus
           ? 0
-          : (usePromoBonus ? promoBonusPercent : (isFirstDeposit ? firstBonusPercent : (settings ? Number(settings.regularDepositBonus) : 20)));
+          : (originalTx.bonusApplied !== undefined && originalTx.bonusApplied !== null
+              ? Number(originalTx.bonusApplied)
+              : (usePromoBonus ? promoBonusPercent : (isFirstDeposit ? firstBonusPercent : regularBonusPercent)));
         
         // Calculate total coins to allot (whole coins only — drop cents after bonus)
         const amount = parseFloat(originalTx.amount);
         const rawCoins = isBonus ? amount : (amount * (1 + bonusPercentage / 100));
-        const totalCoins = Math.floor(Number(rawCoins) || 0);
+        const totalCoins = (originalTx.totalCoins !== undefined && originalTx.totalCoins !== null && Number(originalTx.totalCoins) > 0)
+          ? Number(originalTx.totalCoins)
+          : Math.floor(Number(rawCoins) || 0);
 
         // Coins Manager task — upsert keyed on transactionId so two overlapping
         // approve requests can only ever produce ONE allotment row.

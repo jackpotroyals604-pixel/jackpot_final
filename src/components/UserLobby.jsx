@@ -18,7 +18,6 @@ import { canShowClaimRemainderButton } from '../lib/remainderClaim';
 import { compressImageFile } from '../lib/imageCompress';
 import { formatDeviceDateTime } from '../lib/formatDateTime';
 import PullToRefresh from './PullToRefresh';
-import SignupBonusModal from './SignupBonusCard';
 import { trackInitiateCheckout } from '../lib/metaPixel';
 import OfflineBanner from './OfflineBanner';
 import { registerNativeBackHandler } from '../lib/nativeBack';
@@ -94,7 +93,6 @@ export default function UserLobby({
   const [cashoutDepositModalOpen, setCashoutDepositModalOpen] = useState(false);
   const [cashoutDepositAmount, setCashoutDepositAmount] = useState('');
   const [submittingCashoutDep, setSubmittingCashoutDep] = useState(false);
-  const [bonusModalOpen, setBonusModalOpen] = useState(true);
   const [gameSelectionModalOpen, setGameSelectionModalOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
 
@@ -106,24 +104,12 @@ export default function UserLobby({
       if (pendingAmt) {
         localStorage.removeItem('jackpot_pending_deposit_amount');
         setDepositAmount(String(pendingAmt));
-        setBonusModalOpen(false);
         setGameSelectionModalOpen(true);
       }
     } catch (e) {
       /* ignore */
     }
   }, []);
-
-  const hasSuccessfulDeposit = useMemo(() => {
-    if (!transactions || !currentUserEmail) return false;
-    const email = currentUserEmail.toLowerCase().trim();
-    return transactions.some(
-      (t) =>
-        String(t.type || '').toUpperCase() === 'DEPOSIT' &&
-        String(t.status || '').toUpperCase() === 'SUCCESS' &&
-        (t.userEmail || '').toLowerCase().trim() === email
-    );
-  }, [transactions, currentUserEmail]);
 
   const totalAvailableCashoutHold = useMemo(() => {
     if (!transactions || !currentUserEmail) return 0;
@@ -1064,13 +1050,6 @@ export default function UserLobby({
     }
   };
 
-  const handleLobbyDepositCta = (selectedAmount) => {
-    setBonusModalOpen(false);
-    const amtStr = String(selectedAmount || 10);
-    setDepositAmount(amtStr);
-    setGameSelectionModalOpen(true);
-  };
-
   const handleSelectGameForDeposit = (selectedGame) => {
     if (!selectedGame) return;
     setActiveGame(selectedGame);
@@ -1276,6 +1255,18 @@ export default function UserLobby({
     );
     const gameUsername = allottedAcc ? allottedAcc.username : '';
 
+    const allSuccessDeposits = (transactions || [])
+      .filter(t => (t.type === 'DEPOSIT' || t.isDepositFromCashout) && String(t.status || '').toUpperCase() === 'SUCCESS');
+    const activeDeposits = (transactions || [])
+      .filter(t => (t.type === 'DEPOSIT' || t.isDepositFromCashout) && !['CANCELLED', 'FAILED', 'TIMED_OUT'].includes(String(t.status || '').toUpperCase()));
+    const isFirstDeposit = allSuccessDeposits.length === 0 && activeDeposits.length === 0;
+    const defaultFirst = Number(frontendSettings?.firstDepositBonus !== undefined ? frontendSettings.firstDepositBonus : 300);
+    const defaultReg = Number(frontendSettings?.regularDepositBonus !== undefined ? frontendSettings.regularDepositBonus : 20);
+    const promoBonus = currentUser?.pendingDepositBonusPercent ? Number(currentUser.pendingDepositBonusPercent) : null;
+    const bonusPercentage = promoBonus && promoBonus > 0 ? promoBonus : (isFirstDeposit ? defaultFirst : defaultReg);
+    const amountNum = parseFloat(activeInvoice.amount) || 0;
+    const totalCoins = Math.floor(amountNum * (1 + bonusPercentage / 100));
+
     onSubmitTransaction({
       gameTitle: activeGame.title,
       type: 'DEPOSIT',
@@ -1283,7 +1274,10 @@ export default function UserLobby({
       gateway: activeInvoice.gateway.name,
       code: activeInvoice.noteCode,
       screenshot: screenshotBase64, // Pass Base64 image
-      gameUsername: gameUsername || ''
+      gameUsername: gameUsername || '',
+      bonusApplied: bonusPercentage,
+      totalCoins: totalCoins,
+      gameAmount: totalCoins
     });
 
     clearPendingDeposit();
@@ -3294,10 +3288,19 @@ export default function UserLobby({
                                             .filter(t => (t.type === 'DEPOSIT' || t.isDepositFromCashout) && String(t.status || '').toUpperCase() === 'SUCCESS')
                                             .sort((a, b) => new Date(a.date || a.createdAt || 0) - new Date(b.date || b.createdAt || 0));
 
-                                          const isFirst = allSuccessDeposits.length > 0 && String(allSuccessDeposits[0].id) === String(tx.id);
+                                          const activeDeposits = (transactions || [])
+                                            .filter(t => (t.type === 'DEPOSIT' || t.isDepositFromCashout) && !['CANCELLED', 'FAILED', 'TIMED_OUT'].includes(String(t.status || '').toUpperCase()))
+                                            .sort((a, b) => new Date(a.date || a.createdAt || 0) - new Date(b.date || b.createdAt || 0));
+
+                                          const isFirst = allSuccessDeposits.length > 0
+                                            ? String(allSuccessDeposits[0].id) === String(tx.id)
+                                            : (activeDeposits.length === 0 || String(activeDeposits[0]?.id) === String(tx.id));
+
+                                          const promoBonus = currentUser?.pendingDepositBonusPercent ? Number(currentUser.pendingDepositBonusPercent) : null;
                                           const defaultFirst = Number(frontendSettings?.firstDepositBonus !== undefined ? frontendSettings.firstDepositBonus : 300);
                                           const defaultReg = Number(frontendSettings?.regularDepositBonus !== undefined ? frontendSettings.regularDepositBonus : 20);
-                                          bonusPercent = isFirst ? defaultFirst : defaultReg;
+
+                                          bonusPercent = promoBonus && promoBonus > 0 ? promoBonus : (isFirst ? defaultFirst : defaultReg);
                                           displayCoins = Math.floor(baseAmount * (1 + bonusPercent / 100));
                                         }
 
@@ -4239,31 +4242,6 @@ export default function UserLobby({
           </div>
         </div>
       </div>
-
-      {/* Floating Bonus Trigger Button (shown in Lobby when modal is dismissed and user hasn't deposited yet) */}
-      {!hasSuccessfulDeposit && !bonusModalOpen && (
-        <button
-          type="button"
-          className="auth-floating-bonus-trigger auth-floating-bonus-trigger--lobby"
-          onClick={() => setBonusModalOpen(true)}
-          aria-label="Open Signup Bonus Offer"
-        >
-          <span className="floating-bonus-pulse"></span>
-          <i className="fa-solid fa-gift"></i>
-          <span>{frontendSettings.firstDepositBonus || 300}% BONUS</span>
-        </button>
-      )}
-
-      {/* Floating Signup Bonus Modal (shown to players until they make their first deposit) */}
-      {!hasSuccessfulDeposit && (
-        <SignupBonusModal
-          isOpen={bonusModalOpen}
-          onClose={() => setBonusModalOpen(false)}
-          frontendSettings={frontendSettings}
-          onGoToDeposit={handleLobbyDepositCta}
-          isLoggedIn={true}
-        />
-      )}
 
       {/* Step 2: Game Selection Modal for Deposit Flow */}
       {gameSelectionModalOpen && (

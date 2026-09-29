@@ -38,18 +38,18 @@ export default function SignupBonusModal({
   const bonusAmount = Math.round((activeDeposit * bonusPercent) / 100);
   const totalPlayAmount = activeDeposit + bonusAmount;
 
-  // Lock body scroll cleanly when modal is open
+  // Lock body scroll cleanly when modal is open for visitors who have not signed up
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !isLoggedIn) {
       const origBodyOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
       return () => {
         document.body.style.overflow = origBodyOverflow;
       };
     }
-  }, [isOpen]);
+  }, [isOpen, isLoggedIn]);
 
-  if (!isOpen) return null;
+  if (!isOpen || isLoggedIn) return null;
 
   const handleSelectPreset = (amt) => {
     setIsCustom(false);
