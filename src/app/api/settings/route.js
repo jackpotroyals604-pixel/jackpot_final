@@ -29,6 +29,9 @@ export async function GET() {
         withdrawTier1MaxDeposit: 50,
         withdrawTier1Multiplier: 5,
         withdrawTier2Multiplier: 3,
+        withdrawTier1Basis: 'COINS',
+        withdrawTier2Basis: 'DEPOSIT',
+        withdrawMultiplierBasis: 'TIER_BASED',
         usdtAddress: '',
         usdtQrCode: '',
         affiliatePayoutNetwork: 'TRC20',
@@ -84,6 +87,21 @@ export async function GET() {
       if (settings.withdrawTier2Multiplier === undefined) {
         updates.withdrawTier2Multiplier = 3;
         settings.withdrawTier2Multiplier = 3;
+        needsUpdate = true;
+      }
+      if (settings.withdrawTier1Basis === undefined) {
+        updates.withdrawTier1Basis = 'COINS';
+        settings.withdrawTier1Basis = 'COINS';
+        needsUpdate = true;
+      }
+      if (settings.withdrawTier2Basis === undefined) {
+        updates.withdrawTier2Basis = 'DEPOSIT';
+        settings.withdrawTier2Basis = 'DEPOSIT';
+        needsUpdate = true;
+      }
+      if (settings.withdrawMultiplierBasis === undefined) {
+        updates.withdrawMultiplierBasis = 'TIER_BASED';
+        settings.withdrawMultiplierBasis = 'TIER_BASED';
         needsUpdate = true;
       }
       if (settings.usdtAddress === undefined) {
@@ -155,6 +173,9 @@ export async function PUT(req) {
       withdrawTier1MaxDeposit,
       withdrawTier1Multiplier,
       withdrawTier2Multiplier,
+      withdrawTier1Basis,
+      withdrawTier2Basis,
+      withdrawMultiplierBasis,
       usdtAddress,
       usdtQrCode,
       affiliatePayoutNetwork,
@@ -203,6 +224,21 @@ export async function PUT(req) {
     if (withdrawTier2Multiplier !== undefined) {
       updateFields.withdrawTier2Multiplier = Math.max(0.1, Number(withdrawTier2Multiplier) || 3);
     }
+    if (withdrawTier1Basis !== undefined) {
+      updateFields.withdrawTier1Basis = ['COINS', 'DEPOSIT'].includes(String(withdrawTier1Basis).toUpperCase())
+        ? String(withdrawTier1Basis).toUpperCase()
+        : 'COINS';
+    }
+    if (withdrawTier2Basis !== undefined) {
+      updateFields.withdrawTier2Basis = ['COINS', 'DEPOSIT'].includes(String(withdrawTier2Basis).toUpperCase())
+        ? String(withdrawTier2Basis).toUpperCase()
+        : 'DEPOSIT';
+    }
+    if (withdrawMultiplierBasis !== undefined) {
+      updateFields.withdrawMultiplierBasis = ['COINS', 'DEPOSIT', 'TIER_BASED'].includes(String(withdrawMultiplierBasis).toUpperCase())
+        ? String(withdrawMultiplierBasis).toUpperCase()
+        : 'TIER_BASED';
+    }
     if (usdtAddress !== undefined) {
       updateFields.usdtAddress = String(usdtAddress).trim();
     }
@@ -248,7 +284,7 @@ export async function PUT(req) {
 
     // Sync cashout settings to frontend_settings as well
     const cashoutSync = {};
-    ['freeplayMinWithdraw', 'defaultMinWithdraw', 'withdrawTier1MinDeposit', 'withdrawTier1MaxDeposit', 'withdrawTier1Multiplier', 'withdrawTier2Multiplier'].forEach((key) => {
+    ['freeplayMinWithdraw', 'defaultMinWithdraw', 'withdrawTier1MinDeposit', 'withdrawTier1MaxDeposit', 'withdrawTier1Multiplier', 'withdrawTier2Multiplier', 'withdrawTier1Basis', 'withdrawTier2Basis', 'withdrawMultiplierBasis'].forEach((key) => {
       if (updateFields[key] !== undefined) cashoutSync[key] = updateFields[key];
     });
     if (updateFields.defaultMinWithdraw !== undefined) {

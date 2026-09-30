@@ -9,7 +9,7 @@ import { publishAdminEvent } from '../../../lib/adminEvents';
 import { accountLookupKey, buildGameUsernameMap } from '../../../lib/resolveGameUsername';
 import { compressDataUrlIfNeeded } from '../../../lib/serverImageCompress';
 import { applyStaffGameFilter } from '../../../lib/staffGameAccess';
-import { getDepositBasedMinWithdraw, getDepositWithdrawRule } from '../../../lib/withdrawRules';
+import { getDepositBasedMinWithdraw, getDepositWithdrawRule, formatWithdrawRuleExplanation } from '../../../lib/withdrawRules';
 import { generateUniqueDepositCode } from '../../../lib/depositCodeGenerator';
 
 // GET transactions (supports filtering by email for users, or returning all for admins)
@@ -1190,10 +1190,11 @@ export async function POST(req) {
         const askAmount = parseFloat(txObject.amount);
 
         if (depositMin != null && Number.isFinite(askAmount) && askAmount < depositMin) {
+          const explanation = formatWithdrawRuleExplanation(rule);
           return NextResponse.json(
             {
               success: false,
-              message: `Minimum cashout is $${depositMin.toFixed(2)} (${rule.allottedCoins} coins allotted × ${rule.multiplier}).`
+              message: `Minimum cashout is $${depositMin.toFixed(2)}${explanation ? ` (${explanation})` : ''}.`
             },
             { status: 400 }
           );

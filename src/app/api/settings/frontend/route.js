@@ -26,6 +26,9 @@ const DEFAULT_SETTINGS = {
   withdrawTier1MaxDeposit: 50,
   withdrawTier1Multiplier: 5,
   withdrawTier2Multiplier: 3,
+  withdrawTier1Basis: 'COINS',
+  withdrawTier2Basis: 'DEPOSIT',
+  withdrawMultiplierBasis: 'TIER_BASED',
   // Withdrawal form proof requirements (Super Admin toggles)
   withdrawRequireGameScreenshot: false,
   withdrawRequireTagQrScreenshot: true,
@@ -198,7 +201,7 @@ export async function PUT(req) {
 
     // Sync cashout settings to global_settings as well
     const cashoutSync = {};
-    ['freeplayMinWithdraw', 'defaultMinWithdraw', 'withdrawTier1MinDeposit', 'withdrawTier1MaxDeposit', 'withdrawTier1Multiplier', 'withdrawTier2Multiplier'].forEach((key) => {
+    ['freeplayMinWithdraw', 'defaultMinWithdraw', 'withdrawTier1MinDeposit', 'withdrawTier1MaxDeposit', 'withdrawTier1Multiplier', 'withdrawTier2Multiplier', 'withdrawTier1Basis', 'withdrawTier2Basis', 'withdrawMultiplierBasis'].forEach((key) => {
       if (updateFields[key] !== undefined) cashoutSync[key] = updateFields[key];
     });
     if (updateFields.minimumWithdrawalLimit !== undefined && updateFields.defaultMinWithdraw === undefined) {

@@ -33,6 +33,9 @@ export default function FrontendSettingsTab({ adminUser }) {
   const [withdrawTier2Multiplier, setWithdrawTier2Multiplier] = useState(3);
   const [withdrawTier1MinDeposit, setWithdrawTier1MinDeposit] = useState(5);
   const [withdrawTier1MaxDeposit, setWithdrawTier1MaxDeposit] = useState(50);
+  const [withdrawTier1Basis, setWithdrawTier1Basis] = useState('COINS');
+  const [withdrawTier2Basis, setWithdrawTier2Basis] = useState('DEPOSIT');
+  const [withdrawMultiplierBasis, setWithdrawMultiplierBasis] = useState('TIER_BASED');
   const [withdrawRequireGameScreenshot, setWithdrawRequireGameScreenshot] = useState(false);
   const [withdrawRequireTagQrScreenshot, setWithdrawRequireTagQrScreenshot] = useState(true);
 
@@ -131,6 +134,9 @@ export default function FrontendSettingsTab({ adminUser }) {
       setWithdrawTier2Multiplier(s.withdrawTier2Multiplier !== undefined ? s.withdrawTier2Multiplier : 3);
       setWithdrawTier1MinDeposit(s.withdrawTier1MinDeposit !== undefined ? s.withdrawTier1MinDeposit : 5);
       setWithdrawTier1MaxDeposit(s.withdrawTier1MaxDeposit !== undefined ? s.withdrawTier1MaxDeposit : 50);
+      setWithdrawTier1Basis(s.withdrawTier1Basis || 'COINS');
+      setWithdrawTier2Basis(s.withdrawTier2Basis || 'DEPOSIT');
+      setWithdrawMultiplierBasis(s.withdrawMultiplierBasis || 'TIER_BASED');
       setWithdrawRequireGameScreenshot(s.withdrawRequireGameScreenshot === true);
       setWithdrawRequireTagQrScreenshot(s.withdrawRequireTagQrScreenshot !== false);
 
@@ -282,6 +288,9 @@ export default function FrontendSettingsTab({ adminUser }) {
           withdrawTier2Multiplier: Number(withdrawTier2Multiplier),
           withdrawTier1MinDeposit: Number(withdrawTier1MinDeposit),
           withdrawTier1MaxDeposit: Number(withdrawTier1MaxDeposit),
+          withdrawTier1Basis,
+          withdrawTier2Basis,
+          withdrawMultiplierBasis,
           withdrawRequireGameScreenshot,
           withdrawRequireTagQrScreenshot,
 
@@ -1188,34 +1197,153 @@ export default function FrontendSettingsTab({ adminUser }) {
               </div>
             </div>
 
-            <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
-              <div className="input-group" style={{ margin: 0 }}>
-                <label style={{ fontSize: '0.75rem' }}>Tier 1 Multiplier ($5-$50 Deposit)</label>
-                <div className="input-wrapper" style={{ background: '#07090f' }}>
-                  <i className="fa-solid fa-xmark input-icon" style={{ color: '#f59e0b' }}></i>
-                  <input
-                    type="number"
-                    step="0.1"
-                    placeholder="5"
-                    value={withdrawTier1Multiplier}
-                    onChange={(e) => setWithdrawTier1Multiplier(e.target.value)}
-                    required
-                  />
+            <div style={{ marginTop: '1rem', background: 'rgba(255,255,255,0.02)', padding: '0.85rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <label style={{ fontSize: '0.75rem', color: '#ffd700', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.4rem' }}>
+                <i className="fa-solid fa-sliders"></i> Multiplier Calculation Base (All Rules)
+              </label>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWithdrawMultiplierBasis('TIER_BASED');
+                    setWithdrawTier1Basis('COINS');
+                    setWithdrawTier2Basis('DEPOSIT');
+                  }}
+                  style={{
+                    padding: '0.3rem 0.65rem',
+                    fontSize: '0.7rem',
+                    borderRadius: '5px',
+                    cursor: 'pointer',
+                    background: withdrawMultiplierBasis === 'TIER_BASED' && withdrawTier1Basis === 'COINS' && withdrawTier2Basis === 'DEPOSIT' ? '#f59e0b' : 'rgba(255,255,255,0.08)',
+                    color: withdrawMultiplierBasis === 'TIER_BASED' && withdrawTier1Basis === 'COINS' && withdrawTier2Basis === 'DEPOSIT' ? '#000' : '#ccc',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    fontWeight: '600'
+                  }}
+                >
+                  Tier-Based (Tier 1: Coins, Tier 2: Deposit $)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWithdrawMultiplierBasis('DEPOSIT');
+                    setWithdrawTier1Basis('DEPOSIT');
+                    setWithdrawTier2Basis('DEPOSIT');
+                  }}
+                  style={{
+                    padding: '0.3rem 0.65rem',
+                    fontSize: '0.7rem',
+                    borderRadius: '5px',
+                    cursor: 'pointer',
+                    background: withdrawTier1Basis === 'DEPOSIT' && withdrawTier2Basis === 'DEPOSIT' ? '#38bdf8' : 'rgba(255,255,255,0.08)',
+                    color: withdrawTier1Basis === 'DEPOSIT' && withdrawTier2Basis === 'DEPOSIT' ? '#000' : '#ccc',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    fontWeight: '600'
+                  }}
+                >
+                  All Rules on Deposit Amount ($)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWithdrawMultiplierBasis('COINS');
+                    setWithdrawTier1Basis('COINS');
+                    setWithdrawTier2Basis('COINS');
+                  }}
+                  style={{
+                    padding: '0.3rem 0.65rem',
+                    fontSize: '0.7rem',
+                    borderRadius: '5px',
+                    cursor: 'pointer',
+                    background: withdrawTier1Basis === 'COINS' && withdrawTier2Basis === 'COINS' ? '#10b981' : 'rgba(255,255,255,0.08)',
+                    color: withdrawTier1Basis === 'COINS' && withdrawTier2Basis === 'COINS' ? '#000' : '#ccc',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    fontWeight: '600'
+                  }}
+                >
+                  All Rules on Coins
+                </button>
+              </div>
+              <p style={{ fontSize: '0.65rem', color: '#888', margin: 0 }}>
+                Select whether multiplier rules calculate on Deposit Amount ($) or Allotted Coins.
+              </p>
+            </div>
+
+            <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div className="input-group" style={{ margin: 0, marginBottom: '0.5rem' }}>
+                  <label style={{ fontSize: '0.75rem' }}>Tier 1 Multiplier ($5-$50 Deposit)</label>
+                  <div className="input-wrapper" style={{ background: '#07090f' }}>
+                    <i className="fa-solid fa-xmark input-icon" style={{ color: '#f59e0b' }}></i>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="5"
+                      value={withdrawTier1Multiplier}
+                      onChange={(e) => setWithdrawTier1Multiplier(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="input-group" style={{ margin: 0 }}>
+                  <label style={{ fontSize: '0.72rem', color: '#bbb' }}>Tier 1 Calculation Base</label>
+                  <select
+                    value={withdrawTier1Basis}
+                    onChange={(e) => {
+                      setWithdrawTier1Basis(e.target.value);
+                      setWithdrawMultiplierBasis('CUSTOM');
+                    }}
+                    style={{
+                      width: '100%',
+                      background: '#07090f',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      color: '#fff',
+                      padding: '0.45rem',
+                      borderRadius: '5px',
+                      fontSize: '0.72rem'
+                    }}
+                  >
+                    <option value="COINS">Allotted Coins (Default: Coins × {withdrawTier1Multiplier}x)</option>
+                    <option value="DEPOSIT">Deposit Amount ($ × {withdrawTier1Multiplier}x)</option>
+                  </select>
                 </div>
               </div>
 
-              <div className="input-group" style={{ margin: 0 }}>
-                <label style={{ fontSize: '0.75rem' }}>Tier 2 Multiplier (&gt;$50 Deposit)</label>
-                <div className="input-wrapper" style={{ background: '#07090f' }}>
-                  <i className="fa-solid fa-xmark input-icon" style={{ color: '#38bdf8' }}></i>
-                  <input
-                    type="number"
-                    step="0.1"
-                    placeholder="3"
-                    value={withdrawTier2Multiplier}
-                    onChange={(e) => setWithdrawTier2Multiplier(e.target.value)}
-                    required
-                  />
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div className="input-group" style={{ margin: 0, marginBottom: '0.5rem' }}>
+                  <label style={{ fontSize: '0.75rem' }}>Tier 2 Multiplier (&gt;$50 Deposit)</label>
+                  <div className="input-wrapper" style={{ background: '#07090f' }}>
+                    <i className="fa-solid fa-xmark input-icon" style={{ color: '#38bdf8' }}></i>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="3"
+                      value={withdrawTier2Multiplier}
+                      onChange={(e) => setWithdrawTier2Multiplier(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="input-group" style={{ margin: 0 }}>
+                  <label style={{ fontSize: '0.72rem', color: '#bbb' }}>Tier 2 Calculation Base</label>
+                  <select
+                    value={withdrawTier2Basis}
+                    onChange={(e) => {
+                      setWithdrawTier2Basis(e.target.value);
+                      setWithdrawMultiplierBasis('CUSTOM');
+                    }}
+                    style={{
+                      width: '100%',
+                      background: '#07090f',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      color: '#fff',
+                      padding: '0.45rem',
+                      borderRadius: '5px',
+                      fontSize: '0.72rem'
+                    }}
+                  >
+                    <option value="DEPOSIT">Deposit Amount ($ × {withdrawTier2Multiplier}x) [Default]</option>
+                    <option value="COINS">Allotted Coins (Coins × {withdrawTier2Multiplier}x)</option>
+                  </select>
                 </div>
               </div>
             </div>

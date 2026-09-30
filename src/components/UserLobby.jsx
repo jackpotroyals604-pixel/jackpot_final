@@ -9,7 +9,8 @@ import { getWebPushPromptState, getExistingPushSubscription, subscribeToPromoPus
 import {
   findLastSuccessDeposit,
   getDepositBasedMinWithdraw,
-  getDepositWithdrawRule
+  getDepositWithdrawRule,
+  formatWithdrawRuleExplanation
 } from '../lib/withdrawRules';
 import { shouldShowInfoOnLobby } from '../lib/infoPage';
 import ReferralCenter from './ReferralCenter';
@@ -1347,8 +1348,9 @@ export default function UserLobby({
       });
       const rule = getDepositWithdrawRule(lastDep, frontendSettings);
       if (rule?.minWithdraw != null && amountVal < rule.minWithdraw) {
+        const ruleExp = formatWithdrawRuleExplanation(rule);
         showToast(
-          `Minimum cashout is $${rule.minWithdraw.toFixed(2)} (${rule.allottedCoins} coins allotted × ${rule.multiplier}).`,
+          `Minimum cashout is $${rule.minWithdraw.toFixed(2)}${ruleExp ? ` (${ruleExp})` : ''}.`,
           'error'
         );
         return;
@@ -1394,8 +1396,9 @@ export default function UserLobby({
       });
       const rule = getDepositWithdrawRule(lastDep, frontendSettings);
       if (rule?.minWithdraw != null && amountVal < rule.minWithdraw) {
+        const ruleExp = formatWithdrawRuleExplanation(rule);
         showToast(
-          `Minimum cashout is $${rule.minWithdraw.toFixed(2)} (${rule.allottedCoins} coins allotted × ${rule.multiplier}).`,
+          `Minimum cashout is $${rule.minWithdraw.toFixed(2)}${ruleExp ? ` (${ruleExp})` : ''}.`,
           'error'
         );
         return;
@@ -3051,7 +3054,7 @@ export default function UserLobby({
                               {isFreeplaySession
                                 ? `Min cashout $${withdrawRuleInfo.freeplayMin.toFixed(2)}. Payout to finance is capped at $${withdrawRuleInfo.freeplayMin.toFixed(2)}.`
                                 : (withdrawRuleInfo.depositRule?.minWithdraw != null
-                                    ? `Min cashout $${withdrawRuleInfo.depositRule.minWithdraw.toFixed(2)} (${withdrawRuleInfo.depositRule.allottedCoins} coins × ${withdrawRuleInfo.depositRule.multiplier}).`
+                                    ? `Min cashout $${withdrawRuleInfo.depositRule.minWithdraw.toFixed(2)} (${formatWithdrawRuleExplanation(withdrawRuleInfo.depositRule)}).`
                                     : `Request payout to your preferred tag. Min $${withdrawRuleInfo.defaultMin.toFixed(2)}.`)}
                             </p>
                           </div>

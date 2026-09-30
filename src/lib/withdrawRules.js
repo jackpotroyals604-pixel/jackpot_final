@@ -23,6 +23,14 @@ export function resolveAllottedCoins(lastDeposit, settings = {}) {
   return Math.floor(deposit * (1 + (Number.isFinite(bonus) ? bonus : 20) / 100));
 }
 
+export function formatWithdrawRuleExplanation(rule) {
+  if (!rule) return '';
+  if (rule.basis === 'DEPOSIT') {
+    return `$${Number(rule.depositAmount || 0).toFixed(2)} deposit × ${rule.multiplier}`;
+  }
+  return `${rule.allottedCoins} coins allotted × ${rule.multiplier}`;
+}
+
 export function getDepositWithdrawRule(lastDepositOrAmount, settings = {}) {
   if (!lastDepositOrAmount) return null;
 
@@ -44,6 +52,26 @@ export function getDepositWithdrawRule(lastDepositOrAmount, settings = {}) {
   const tier1Mult = Number(settings.withdrawTier1Multiplier ?? 5);
   const tier2Mult = Number(settings.withdrawTier2Multiplier ?? 3);
 
+  // Global multiplier basis fallback ('COINS' | 'DEPOSIT')
+  const globalBasis = settings.withdrawMultiplierBasis ? String(settings.withdrawMultiplierBasis).toUpperCase() : null;
+
+  // Tier 1 basis: default 'COINS' unless explicitly set or global basis is 'DEPOSIT'
+  let tier1Basis = 'COINS';
+  if (settings.withdrawTier1Basis) {
+    tier1Basis = String(settings.withdrawTier1Basis).toUpperCase() === 'DEPOSIT' ? 'DEPOSIT' : 'COINS';
+  } else if (globalBasis === 'DEPOSIT') {
+    tier1Basis = 'DEPOSIT';
+  }
+
+  // Tier 2 basis: default 'DEPOSIT' (> $50 deposit multiplies deposit amount, not coins)
+  // unless explicitly set to 'COINS' or global basis is set to 'COINS'
+  let tier2Basis = 'DEPOSIT';
+  if (settings.withdrawTier2Basis) {
+    tier2Basis = String(settings.withdrawTier2Basis).toUpperCase() === 'COINS' ? 'COINS' : 'DEPOSIT';
+  } else if (globalBasis === 'COINS') {
+    tier2Basis = 'COINS';
+  }
+
   // Fallback if allotted coins resulted in 0 or less
   if (allottedCoins <= 0) {
     allottedCoins = Math.max(1, Math.floor(depositAmount));
@@ -51,10 +79,13 @@ export function getDepositWithdrawRule(lastDepositOrAmount, settings = {}) {
 
   // Tier 1: deposit between $5 and $50 (inclusive)
   if (depositAmount >= tier1Min && depositAmount <= tier1Max) {
-    const minWithdraw = Math.round(allottedCoins * tier1Mult * 100) / 100;
+    const baseValue = tier1Basis === 'DEPOSIT' ? depositAmount : allottedCoins;
+    const minWithdraw = Math.round(baseValue * tier1Mult * 100) / 100;
     return {
       minWithdraw,
       multiplier: tier1Mult,
+      basis: tier1Basis,
+      baseValue,
       allottedCoins,
       depositAmount,
       tier: 1
@@ -63,10 +94,13 @@ export function getDepositWithdrawRule(lastDepositOrAmount, settings = {}) {
 
   // Tier 2: deposit strictly above $50
   if (depositAmount > tier1Max) {
-    const minWithdraw = Math.round(allottedCoins * tier2Mult * 100) / 100;
+    const baseValue = tier2Basis === 'DEPOSIT' ? depositAmount : allottedCoins;
+    const minWithdraw = Math.round(baseValue * tier2Mult * 100) / 100;
     return {
       minWithdraw,
       multiplier: tier2Mult,
+      basis: tier2Basis,
+      baseValue,
       allottedCoins,
       depositAmount,
       tier: 2
