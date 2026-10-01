@@ -31,7 +31,7 @@ export async function GET() {
         withdrawTier2Multiplier: 3,
         withdrawTier1Basis: 'COINS',
         withdrawTier2Basis: 'DEPOSIT',
-        withdrawMultiplierBasis: 'TIER_BASED',
+        withdrawMultiplierBasis: 'SIGNUP_ONLY_COINS',
         usdtAddress: '',
         usdtQrCode: '',
         affiliatePayoutNetwork: 'TRC20',
@@ -100,8 +100,8 @@ export async function GET() {
         needsUpdate = true;
       }
       if (settings.withdrawMultiplierBasis === undefined) {
-        updates.withdrawMultiplierBasis = 'TIER_BASED';
-        settings.withdrawMultiplierBasis = 'TIER_BASED';
+        updates.withdrawMultiplierBasis = 'SIGNUP_ONLY_COINS';
+        settings.withdrawMultiplierBasis = 'SIGNUP_ONLY_COINS';
         needsUpdate = true;
       }
       if (settings.usdtAddress === undefined) {
@@ -235,9 +235,9 @@ export async function PUT(req) {
         : 'DEPOSIT';
     }
     if (withdrawMultiplierBasis !== undefined) {
-      updateFields.withdrawMultiplierBasis = ['COINS', 'DEPOSIT', 'TIER_BASED'].includes(String(withdrawMultiplierBasis).toUpperCase())
+      updateFields.withdrawMultiplierBasis = ['COINS', 'DEPOSIT', 'SIGNUP_ONLY_COINS', 'TIER_BASED', 'CUSTOM'].includes(String(withdrawMultiplierBasis).toUpperCase())
         ? String(withdrawMultiplierBasis).toUpperCase()
-        : 'TIER_BASED';
+        : 'SIGNUP_ONLY_COINS';
     }
     if (usdtAddress !== undefined) {
       updateFields.usdtAddress = String(usdtAddress).trim();

@@ -35,7 +35,7 @@ export default function FrontendSettingsTab({ adminUser }) {
   const [withdrawTier1MaxDeposit, setWithdrawTier1MaxDeposit] = useState(50);
   const [withdrawTier1Basis, setWithdrawTier1Basis] = useState('COINS');
   const [withdrawTier2Basis, setWithdrawTier2Basis] = useState('DEPOSIT');
-  const [withdrawMultiplierBasis, setWithdrawMultiplierBasis] = useState('TIER_BASED');
+  const [withdrawMultiplierBasis, setWithdrawMultiplierBasis] = useState('SIGNUP_ONLY_COINS');
   const [withdrawRequireGameScreenshot, setWithdrawRequireGameScreenshot] = useState(false);
   const [withdrawRequireTagQrScreenshot, setWithdrawRequireTagQrScreenshot] = useState(true);
 
@@ -49,6 +49,7 @@ export default function FrontendSettingsTab({ adminUser }) {
 
   // Lobby Home Page Texts
   const [lobbyHeroPromo, setLobbyHeroPromo] = useState('');
+  const [lobbyHeroRegularPromo, setLobbyHeroRegularPromo] = useState('');
   const [lobbyTrustBadge1, setLobbyTrustBadge1] = useState('');
   const [lobbyTrustBadge2, setLobbyTrustBadge2] = useState('');
   const [lobbyTrustBadge3, setLobbyTrustBadge3] = useState('');
@@ -136,7 +137,7 @@ export default function FrontendSettingsTab({ adminUser }) {
       setWithdrawTier1MaxDeposit(s.withdrawTier1MaxDeposit !== undefined ? s.withdrawTier1MaxDeposit : 50);
       setWithdrawTier1Basis(s.withdrawTier1Basis || 'COINS');
       setWithdrawTier2Basis(s.withdrawTier2Basis || 'DEPOSIT');
-      setWithdrawMultiplierBasis(s.withdrawMultiplierBasis || 'TIER_BASED');
+      setWithdrawMultiplierBasis(s.withdrawMultiplierBasis || 'SIGNUP_ONLY_COINS');
       setWithdrawRequireGameScreenshot(s.withdrawRequireGameScreenshot === true);
       setWithdrawRequireTagQrScreenshot(s.withdrawRequireTagQrScreenshot !== false);
 
@@ -148,6 +149,7 @@ export default function FrontendSettingsTab({ adminUser }) {
       setLandingMessengerWarning(s.landingMessengerWarning || 'Google sign-in is not supported inside Messenger. Please open this page in Chrome or Safari.');
 
       setLobbyHeroPromo(s.lobbyHeroPromo || 'GET 300% SIGNUP BONUS ON YOUR FIRST DEPOSIT');
+      setLobbyHeroRegularPromo(s.lobbyHeroRegularPromo || '');
       setLobbyTrustBadge1(s.lobbyTrustBadge1 || 'Instant Withdrawals');
       setLobbyTrustBadge2(s.lobbyTrustBadge2 || 'Secure & Safe');
       setLobbyTrustBadge3(s.lobbyTrustBadge3 || 'Trusted by 1B+ Players');
@@ -302,6 +304,7 @@ export default function FrontendSettingsTab({ adminUser }) {
           landingMessengerWarning,
 
           lobbyHeroPromo,
+          lobbyHeroRegularPromo,
           lobbyTrustBadge1,
           lobbyTrustBadge2,
           lobbyTrustBadge3,
@@ -638,11 +641,26 @@ export default function FrontendSettingsTab({ adminUser }) {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <div className="input-group" style={{ margin: 0 }}>
-                <label>Left Promo Headline</label>
+                <label>Left Promo Headline (First Deposit / Signup)</label>
                 <div className="input-wrapper" style={{ background: '#07090f' }}>
                   <i className="fa-solid fa-gift input-icon"></i>
                   <input type="text" value={lobbyHeroPromo} onChange={(e) => setLobbyHeroPromo(e.target.value)} required />
                 </div>
+                <span className="game-tap-tip">Shown to new players before their first deposit is approved.</span>
+              </div>
+
+              <div className="input-group" style={{ margin: 0 }}>
+                <label>Left Promo Headline (After First Deposit / Regular Bonus)</label>
+                <div className="input-wrapper" style={{ background: '#07090f' }}>
+                  <i className="fa-solid fa-coins input-icon" style={{ color: '#ffd700' }}></i>
+                  <input
+                    type="text"
+                    value={lobbyHeroRegularPromo}
+                    placeholder="e.g. GET 20% BONUS ON EVERY DEPOSIT"
+                    onChange={(e) => setLobbyHeroRegularPromo(e.target.value)}
+                  />
+                </div>
+                <span className="game-tap-tip">Shown to players once their first deposit is approved. If left blank, automatically displays &quot;GET [regular bonus]% BONUS ON EVERY DEPOSIT&quot;.</span>
               </div>
 
               <div style={{ display: 'flex', gap: '0.5rem', width: '100%', flexWrap: 'wrap' }}>
@@ -1205,7 +1223,7 @@ export default function FrontendSettingsTab({ adminUser }) {
                 <button
                   type="button"
                   onClick={() => {
-                    setWithdrawMultiplierBasis('TIER_BASED');
+                    setWithdrawMultiplierBasis('SIGNUP_ONLY_COINS');
                     setWithdrawTier1Basis('COINS');
                     setWithdrawTier2Basis('DEPOSIT');
                   }}
@@ -1214,13 +1232,13 @@ export default function FrontendSettingsTab({ adminUser }) {
                     fontSize: '0.7rem',
                     borderRadius: '5px',
                     cursor: 'pointer',
-                    background: withdrawMultiplierBasis === 'TIER_BASED' && withdrawTier1Basis === 'COINS' && withdrawTier2Basis === 'DEPOSIT' ? '#f59e0b' : 'rgba(255,255,255,0.08)',
-                    color: withdrawMultiplierBasis === 'TIER_BASED' && withdrawTier1Basis === 'COINS' && withdrawTier2Basis === 'DEPOSIT' ? '#000' : '#ccc',
+                    background: withdrawMultiplierBasis === 'SIGNUP_ONLY_COINS' || withdrawMultiplierBasis === 'TIER_BASED' ? '#f59e0b' : 'rgba(255,255,255,0.08)',
+                    color: withdrawMultiplierBasis === 'SIGNUP_ONLY_COINS' || withdrawMultiplierBasis === 'TIER_BASED' ? '#000' : '#ccc',
                     border: '1px solid rgba(255,255,255,0.1)',
                     fontWeight: '600'
                   }}
                 >
-                  Tier-Based (Tier 1: Coins, Tier 2: Deposit $)
+                  Only Signup Bonus on Coins (Others on Deposit $) [Recommended]
                 </button>
                 <button
                   type="button"
@@ -1234,8 +1252,8 @@ export default function FrontendSettingsTab({ adminUser }) {
                     fontSize: '0.7rem',
                     borderRadius: '5px',
                     cursor: 'pointer',
-                    background: withdrawTier1Basis === 'DEPOSIT' && withdrawTier2Basis === 'DEPOSIT' ? '#38bdf8' : 'rgba(255,255,255,0.08)',
-                    color: withdrawTier1Basis === 'DEPOSIT' && withdrawTier2Basis === 'DEPOSIT' ? '#000' : '#ccc',
+                    background: withdrawMultiplierBasis === 'DEPOSIT' ? '#38bdf8' : 'rgba(255,255,255,0.08)',
+                    color: withdrawMultiplierBasis === 'DEPOSIT' ? '#000' : '#ccc',
                     border: '1px solid rgba(255,255,255,0.1)',
                     fontWeight: '600'
                   }}
@@ -1254,8 +1272,8 @@ export default function FrontendSettingsTab({ adminUser }) {
                     fontSize: '0.7rem',
                     borderRadius: '5px',
                     cursor: 'pointer',
-                    background: withdrawTier1Basis === 'COINS' && withdrawTier2Basis === 'COINS' ? '#10b981' : 'rgba(255,255,255,0.08)',
-                    color: withdrawTier1Basis === 'COINS' && withdrawTier2Basis === 'COINS' ? '#000' : '#ccc',
+                    background: withdrawMultiplierBasis === 'COINS' ? '#10b981' : 'rgba(255,255,255,0.08)',
+                    color: withdrawMultiplierBasis === 'COINS' ? '#000' : '#ccc',
                     border: '1px solid rgba(255,255,255,0.1)',
                     fontWeight: '600'
                   }}
@@ -1264,7 +1282,11 @@ export default function FrontendSettingsTab({ adminUser }) {
                 </button>
               </div>
               <p style={{ fontSize: '0.65rem', color: '#888', margin: 0 }}>
-                Select whether multiplier rules calculate on Deposit Amount ($) or Allotted Coins.
+                {withdrawMultiplierBasis === 'DEPOSIT'
+                  ? 'All cashout rules calculate strictly from Deposit Amount ($).'
+                  : withdrawMultiplierBasis === 'COINS'
+                  ? 'All cashout rules calculate from Allotted Coins (deposit + bonus).'
+                  : 'Only Signup Bonus (1st deposit) attaches coins with deposit amount. All subsequent regular deposits calculate strictly from Deposit Amount ($).'}
               </p>
             </div>
 

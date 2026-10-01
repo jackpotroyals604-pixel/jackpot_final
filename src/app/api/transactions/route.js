@@ -1073,6 +1073,7 @@ export async function POST(req) {
         txObject.bonusApplied = bonusPercentage;
         txObject.totalCoins = totalCoins;
         txObject.gameAmount = totalCoins;
+        txObject.isFirstDeposit = Boolean(isFirstDeposit);
       }
     }
 
@@ -1180,6 +1181,23 @@ export async function POST(req) {
               lastDeposit.totalCoins = coinNoti.totalCoins;
               if (coinNoti.bonusApplied !== undefined) lastDeposit.bonusApplied = coinNoti.bonusApplied;
             }
+          } catch {
+            /* ignore */
+          }
+        }
+
+        if (lastDeposit) {
+          try {
+            const earliestDeposit = await transactionsCollection.findOne(
+              { userEmail: txObject.userEmail, type: 'DEPOSIT', status: 'SUCCESS' },
+              { sort: { createdAt: 1, id: 1 } }
+            );
+            const isFirst = Boolean(
+              lastDeposit.isFirstDeposit === true ||
+              (earliestDeposit && String(earliestDeposit.id) === String(lastDeposit.id)) ||
+              (Number(lastDeposit.bonusApplied) >= 100)
+            );
+            lastDeposit.isFirstDeposit = isFirst;
           } catch {
             /* ignore */
           }
@@ -1672,6 +1690,7 @@ export async function PUT(req) {
         updateFields.totalCoins = totalCoins;
         updateFields.bonusApplied = bonusPercentage;
         updateFields.gameAmount = totalCoins;
+        updateFields.isFirstDeposit = Boolean(isFirstDeposit);
 
         // If this deposit was already Loaded, force SUCCESS (even if stuck on COINS_LOADING)
         if (existingStatus === 'COMPLETED') {

@@ -32,7 +32,7 @@ export default function SettingsTab({ onUpdateSettings }) {
   const [withdrawTier1MaxDeposit, setWithdrawTier1MaxDeposit] = useState(50);
   const [withdrawTier1Basis, setWithdrawTier1Basis] = useState('COINS');
   const [withdrawTier2Basis, setWithdrawTier2Basis] = useState('DEPOSIT');
-  const [withdrawMultiplierBasis, setWithdrawMultiplierBasis] = useState('TIER_BASED');
+  const [withdrawMultiplierBasis, setWithdrawMultiplierBasis] = useState('SIGNUP_ONLY_COINS');
 
   // Sync settings inputs when SWR loads data
   useEffect(() => {
@@ -49,7 +49,7 @@ export default function SettingsTab({ onUpdateSettings }) {
       setWithdrawTier1MaxDeposit(settingsData.settings.withdrawTier1MaxDeposit !== undefined ? settingsData.settings.withdrawTier1MaxDeposit : 50);
       setWithdrawTier1Basis(settingsData.settings.withdrawTier1Basis || 'COINS');
       setWithdrawTier2Basis(settingsData.settings.withdrawTier2Basis || 'DEPOSIT');
-      setWithdrawMultiplierBasis(settingsData.settings.withdrawMultiplierBasis || 'TIER_BASED');
+      setWithdrawMultiplierBasis(settingsData.settings.withdrawMultiplierBasis || 'SIGNUP_ONLY_COINS');
       setUsdtAddressInput(settingsData.settings.usdtAddress || '');
       setUsdtQrCodeInput(settingsData.settings.usdtQrCode || '');
       setAffiliatePayoutNetwork(settingsData.settings.affiliatePayoutNetwork || 'TRC20');
@@ -311,7 +311,7 @@ export default function SettingsTab({ onUpdateSettings }) {
               <button
                 type="button"
                 onClick={() => {
-                  setWithdrawMultiplierBasis('TIER_BASED');
+                  setWithdrawMultiplierBasis('SIGNUP_ONLY_COINS');
                   setWithdrawTier1Basis('COINS');
                   setWithdrawTier2Basis('DEPOSIT');
                 }}
@@ -320,13 +320,13 @@ export default function SettingsTab({ onUpdateSettings }) {
                   fontSize: '0.72rem',
                   borderRadius: '6px',
                   cursor: 'pointer',
-                  background: withdrawMultiplierBasis === 'TIER_BASED' && withdrawTier1Basis === 'COINS' && withdrawTier2Basis === 'DEPOSIT' ? '#f59e0b' : 'rgba(255,255,255,0.08)',
-                  color: withdrawMultiplierBasis === 'TIER_BASED' && withdrawTier1Basis === 'COINS' && withdrawTier2Basis === 'DEPOSIT' ? '#000' : '#ccc',
+                  background: withdrawMultiplierBasis === 'SIGNUP_ONLY_COINS' || withdrawMultiplierBasis === 'TIER_BASED' ? '#f59e0b' : 'rgba(255,255,255,0.08)',
+                  color: withdrawMultiplierBasis === 'SIGNUP_ONLY_COINS' || withdrawMultiplierBasis === 'TIER_BASED' ? '#000' : '#ccc',
                   border: '1px solid rgba(255,255,255,0.1)',
                   fontWeight: '600'
                 }}
               >
-                Tier-Based (Tier 1: Coins, Tier 2: Deposit $)
+                Only Signup Bonus on Coins (Others on Deposit $) [Recommended]
               </button>
               <button
                 type="button"
@@ -340,8 +340,8 @@ export default function SettingsTab({ onUpdateSettings }) {
                   fontSize: '0.72rem',
                   borderRadius: '6px',
                   cursor: 'pointer',
-                  background: withdrawTier1Basis === 'DEPOSIT' && withdrawTier2Basis === 'DEPOSIT' ? '#38bdf8' : 'rgba(255,255,255,0.08)',
-                  color: withdrawTier1Basis === 'DEPOSIT' && withdrawTier2Basis === 'DEPOSIT' ? '#000' : '#ccc',
+                  background: withdrawMultiplierBasis === 'DEPOSIT' ? '#38bdf8' : 'rgba(255,255,255,0.08)',
+                  color: withdrawMultiplierBasis === 'DEPOSIT' ? '#000' : '#ccc',
                   border: '1px solid rgba(255,255,255,0.1)',
                   fontWeight: '600'
                 }}
@@ -360,8 +360,8 @@ export default function SettingsTab({ onUpdateSettings }) {
                   fontSize: '0.72rem',
                   borderRadius: '6px',
                   cursor: 'pointer',
-                  background: withdrawTier1Basis === 'COINS' && withdrawTier2Basis === 'COINS' ? '#10b981' : 'rgba(255,255,255,0.08)',
-                  color: withdrawTier1Basis === 'COINS' && withdrawTier2Basis === 'COINS' ? '#000' : '#ccc',
+                  background: withdrawMultiplierBasis === 'COINS' ? '#10b981' : 'rgba(255,255,255,0.08)',
+                  color: withdrawMultiplierBasis === 'COINS' ? '#000' : '#ccc',
                   border: '1px solid rgba(255,255,255,0.1)',
                   fontWeight: '600'
                 }}
@@ -370,7 +370,11 @@ export default function SettingsTab({ onUpdateSettings }) {
               </button>
             </div>
             <span className="game-tap-tip">
-              Choose whether cashout minimums multiply from Deposit Amount ($) or Allotted Coins across rules.
+              {withdrawMultiplierBasis === 'DEPOSIT'
+                ? 'All cashout rules calculate strictly from Deposit Amount ($).'
+                : withdrawMultiplierBasis === 'COINS'
+                ? 'All cashout rules calculate from Allotted Coins (deposit + bonus).'
+                : 'Only Signup Bonus (1st deposit) attaches coins with deposit amount. All subsequent regular deposits calculate strictly from Deposit Amount ($).'}
             </span>
           </div>
 

@@ -28,7 +28,7 @@ const DEFAULT_SETTINGS = {
   withdrawTier2Multiplier: 3,
   withdrawTier1Basis: 'COINS',
   withdrawTier2Basis: 'DEPOSIT',
-  withdrawMultiplierBasis: 'TIER_BASED',
+  withdrawMultiplierBasis: 'SIGNUP_ONLY_COINS',
   // Withdrawal form proof requirements (Super Admin toggles)
   withdrawRequireGameScreenshot: false,
   withdrawRequireTagQrScreenshot: true,
@@ -43,6 +43,7 @@ const DEFAULT_SETTINGS = {
   
   // Lobby Homepage Hero & Freeplay Texts
   lobbyHeroPromo: 'GET 300% SIGNUP BONUS ON YOUR FIRST DEPOSIT',
+  lobbyHeroRegularPromo: 'GET 20% BONUS ON EVERY DEPOSIT',
   lobbyTrustBadge1: 'Instant Withdrawals',
   lobbyTrustBadge2: 'Secure & Safe',
   lobbyTrustBadge3: 'Trusted by 1B+ Players',

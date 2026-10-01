@@ -323,6 +323,28 @@ export default function UserLobby({
     };
   }, [frontendSettings, transactions, currentUserEmail, activeGame, isFreeplaySession]);
 
+  const hasApprovedDeposit = useMemo(() => {
+    return (transactions || []).some(
+      (t) => (t.type === 'DEPOSIT' || t.isDepositFromCashout) && String(t.status || '').toUpperCase() === 'SUCCESS'
+    );
+  }, [transactions]);
+
+  const heroHeadline = useMemo(() => {
+    const regBonus = Number(frontendSettings?.regularDepositBonus !== undefined ? frontendSettings.regularDepositBonus : 20);
+    const promoBonus = currentUser?.pendingDepositBonusPercent ? Number(currentUser.pendingDepositBonusPercent) : null;
+    const activeRegBonus = promoBonus && promoBonus > 0 ? promoBonus : regBonus;
+    const firstBonus = Number(frontendSettings?.firstDepositBonus !== undefined ? frontendSettings.firstDepositBonus : 300);
+
+    if (hasApprovedDeposit) {
+      if (frontendSettings?.lobbyHeroRegularPromo && frontendSettings.lobbyHeroRegularPromo.trim() !== '') {
+        return frontendSettings.lobbyHeroRegularPromo;
+      }
+      return `GET ${activeRegBonus}% BONUS ON EVERY DEPOSIT`;
+    }
+
+    return frontendSettings?.lobbyHeroPromo || `GET ${firstBonus}% SIGNUP BONUS ON YOUR FIRST DEPOSIT`;
+  }, [hasApprovedDeposit, frontendSettings, currentUser]);
+
   // Signup freeplay (one game) OR deposit $25+ freeplay. Hide claim once a request
   // is already pending/processing until the next eligibility window.
   const freeplayGate = React.useMemo(() => {
@@ -2136,8 +2158,8 @@ export default function UserLobby({
 
           <section className="lobby-hero">
             <div className="hero-promo-block">
-              <h2 className="hero-promo-headline" style={{ textTransform: 'uppercase', visibility: frontendSettings?.lobbyHeroPromo ? 'visible' : 'hidden' }}>
-                {frontendSettings?.lobbyHeroPromo || "GET SIGNUP BONUS ON YOUR FIRST DEPOSIT"}
+              <h2 className="hero-promo-headline" style={{ textTransform: 'uppercase' }}>
+                {heroHeadline}
               </h2>
               <div className="hero-trust-badges">
                 <div className="trust-pill"><i className="fa-solid fa-shield-halved"></i> {frontendSettings?.lobbyTrustBadge1 || "Instant Withdrawals"}</div>
